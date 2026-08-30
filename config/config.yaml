@@ -1,3 +1,7 @@
+service:
+  # 服务名，作为上报事件的 service_name 写入采集端，多服务共用一个采集端时据此区分来源
+  name: apilab
+
 server:
   port: 8084
 

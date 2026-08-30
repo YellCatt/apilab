@@ -71,6 +71,7 @@ func run() error {
 
 	// 启动参数落一份调试日志，排查环境问题时不必再翻配置文件。
 	logger.Debug("配置加载完成",
+		zap.String("service.name", config.GetServiceName()),
 		zap.Int("server.port", config.GetServerPort()),
 		zap.String("database.path", config.GetDatabasePath()),
 		zap.String("log.path", logOpts.Dir),
@@ -83,7 +84,10 @@ func run() error {
 		zap.Duration("collector.flush_interval", config.GetCollectorFlushInterval()),
 	)
 
-	traceService := service.NewTraceService(config.GetCollectorURL(), config.GetCollectorBatchSize(), config.GetCollectorFlushInterval())
+	traceService := service.NewTraceService(
+		config.GetCollectorURL(), config.GetServiceName(),
+		config.GetCollectorBatchSize(), config.GetCollectorFlushInterval(),
+	)
 	defer traceService.Stop()
 	traceController := controller.NewTraceController(traceService)
 
@@ -91,7 +95,7 @@ func run() error {
 	// 顺序反了插件就会绑到 no-op tracer 上，SQL span 一条都收不到。
 	// 关闭顺序也相反：先 shutdown 把剩余 span 导出，再停上报器把它们发出去。
 	shutdownTrace, err := trace.Init(trace.Options{
-		ServiceName: "apilab",
+		ServiceName: config.GetServiceName(),
 		Reporter:    traceService,
 	})
 	if err != nil {

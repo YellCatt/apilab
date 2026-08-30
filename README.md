@@ -155,6 +155,9 @@ curl http://localhost:8084/status
 配置文件 `config/config.yaml` 会在首次运行时自动创建：
 
 ```yaml
+service:
+  name: apilab
+
 server:
   port: 8084
 
@@ -176,6 +179,7 @@ collector:
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
+| service.name | 服务名，作为上报事件的 service_name | apilab |
 | server.port | 服务端口 | 8084 |
 | database.path | SQLite 数据库路径 | ./data.db |
 | log.path | 日志目录 | ./logs |

@@ -122,7 +122,7 @@ func Init(opts Options) (func(), error) {
 	p := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
 		sdktrace.WithSpanProcessor(sdktrace.NewBatchSpanProcessor(
-			&eventExporter{reporter: opts.Reporter},
+			&eventExporter{reporter: opts.Reporter, serviceName: name},
 			sdktrace.WithBatchTimeout(batchTimeout),
 			sdktrace.WithMaxQueueSize(maxQueueSize),
 		)),
@@ -175,7 +175,8 @@ func shutdown() {
 // eventExporter 把 OTel span 转成 model.TraceEvent 交给 Reporter。
 // 它实现了 sdktrace.SpanExporter 接口。
 type eventExporter struct {
-	reporter Reporter
+	reporter    Reporter
+	serviceName string // 本服务名，逐条写入事件的 service_name
 }
 
 // ExportSpans 把一批 span 转成事件上报。
@@ -197,7 +198,10 @@ func (e *eventExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOn
 	events := make([]model.TraceEvent, 0, len(spans)*2)
 	for _, s := range spans {
 		url := urls[s.SpanContext().TraceID().String()]
-		events = append(events, newEvent(s, "start", url), newEvent(s, "end", url))
+		events = append(events,
+			newEvent(s, e.serviceName, "start", url),
+			newEvent(s, e.serviceName, "end", url),
+		)
 	}
 
 	logger.Debug("导出 span 批次", zap.Int("spans", len(spans)), zap.Int("events", len(events)))
@@ -212,7 +216,7 @@ func (e *eventExporter) Shutdown(context.Context) error {
 
 // newEvent 把一个 span 转成一条 start 或 end 事件。
 // url 为空时退回 span 自身的 URL（HTTP 根 span 自带 http.target/route），子 span 通常为空。
-func newEvent(s sdktrace.ReadOnlySpan, event, url string) model.TraceEvent {
+func newEvent(s sdktrace.ReadOnlySpan, serviceName, event, url string) model.TraceEvent {
 	cost := s.EndTime().Sub(s.StartTime())
 	ts := s.StartTime()
 	if event == "end" {
@@ -226,15 +230,16 @@ func newEvent(s sdktrace.ReadOnlySpan, event, url string) model.TraceEvent {
 	}
 	module := rawModule(s, set)
 	te := model.TraceEvent{
-		TraceID:   s.SpanContext().TraceID().String(),
-		SpanID:    s.SpanContext().SpanID().String(),
-		Timestamp: ts,
-		Level:     spanLevel(s, set, cost),
-		Module:    module,
-		Event:     event,
-		Message:   spanMessage(s, set),
-		Params:    map[string]interface{}{},
-		URL:       url,
+		ServiceName: serviceName,
+		TraceID:     s.SpanContext().TraceID().String(),
+		SpanID:      s.SpanContext().SpanID().String(),
+		Timestamp:   ts,
+		Level:       spanLevel(s, set, cost),
+		Module:      module,
+		Event:       event,
+		Message:     spanMessage(s, set),
+		Params:      map[string]interface{}{},
+		URL:         url,
 	}
 	for _, kv := range s.Attributes() {
 		te.Params[string(kv.Key)] = attributeValue(kv.Value)

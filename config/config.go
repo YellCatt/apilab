@@ -13,11 +13,20 @@ import (
 
 // Config 应用程序的根配置结构，聚合了服务、数据库、日志和采集端配置。
 type Config struct {
+	Service   ServiceConfig   `yaml:"service"`   // 服务身份配置
 	Server    ServerConfig    `yaml:"server"`    // 服务端配置
 	Database  DatabaseConfig  `yaml:"database"`  // 数据库配置
 	Log       LogConfig       `yaml:"log"`       // 日志配置
 	Collector CollectorConfig `yaml:"collector"` // 采集端配置
 }
+
+// ServiceConfig 服务身份配置，其中服务名会上报给采集端用于区分来源服务。
+type ServiceConfig struct {
+	Name string `yaml:"name"` // 服务名，如 order-service
+}
+
+// defaultServiceName 未配置服务名时的兜底值，与 trace.Init 的缺省值保持一致。
+const defaultServiceName = "apilab"
 
 // ServerConfig 服务端相关配置，包括监听端口。
 type ServerConfig struct {
@@ -74,6 +83,9 @@ func LoadConfig() {
 // createDefaultConfig 创建默认配置文件并写入指定路径。
 func createDefaultConfig(path string) error {
 	defaultCfg := Config{
+		Service: ServiceConfig{
+			Name: defaultServiceName,
+		},
 		Server: ServerConfig{
 			Port: 8084,
 		},
@@ -104,6 +116,15 @@ func createDefaultConfig(path string) error {
 	}
 
 	return os.WriteFile(path, data, 0644)
+}
+
+// GetServiceName 返回服务名，未配置时默认 apilab。
+// 它同时是链路追踪的 service.name 与上报事件的 service_name。
+func GetServiceName() string {
+	if name := strings.TrimSpace(cfg.Service.Name); name != "" {
+		return name
+	}
+	return defaultServiceName
 }
 
 // GetServerPort 返回当前服务配置的监听端口号。

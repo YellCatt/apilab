@@ -5,6 +5,7 @@ import "time"
 
 // TraceEvent 一条 trace 事件日志，对应采集端定义的字段。
 type TraceEvent struct {
+	ServiceName  string                 `json:"service_name,omitempty"`   // 产生该事件的服务名
 	TraceID      string                 `json:"trace_id"`                 // 链路 ID
 	SpanID       string                 `json:"span_id"`                  // 当前 Span ID
 	ParentSpanID string                 `json:"parent_span_id,omitempty"` // 父 Span ID（空表示根）
@@ -20,6 +21,7 @@ type TraceEvent struct {
 
 // TraceReportRequest 上报 trace 事件的请求体。
 type TraceReportRequest struct {
-	URL    string       `json:"url,omitempty"` // 整批事件共属的请求 URL，事件未带 url 时用它兜底
-	Events []TraceEvent `json:"events"`
+	ServiceName string       `json:"service_name,omitempty"` // 整批事件共属的服务名，事件未带 service_name 时用它兜底
+	URL         string       `json:"url,omitempty"`          // 整批事件共属的请求 URL，事件未带 url 时用它兜底
+	Events      []TraceEvent `json:"events"`
 }

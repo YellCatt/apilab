@@ -57,6 +57,7 @@ type traceService struct {
 	dropped  uint64 // 累计因发送失败而丢弃的事件数
 
 	collectorURL string        // 采集端接收地址
+	serviceName  string        // 本服务名，事件未带 serviceName 时用它兜底
 	batchSize    int           // 批量上报阈值
 	client       *http.Client  // HTTP 客户端
 	stopCh       chan struct{} // 停止信号
@@ -70,9 +71,11 @@ type traceService struct {
 }
 
 // NewTraceService 创建一个新的 Trace 上报服务，并启动后台定时刷新协程。
-func NewTraceService(collectorURL string, batchSize int, flushInterval time.Duration) TraceService {
+// serviceName 是本服务名：事件未带 service_name 时用它兜底，也用于链路追踪的 service.name。
+func NewTraceService(collectorURL, serviceName string, batchSize int, flushInterval time.Duration) TraceService {
 	s := &traceService{
 		collectorURL: collectorURL,
+		serviceName:  serviceName,
 		batchSize:    batchSize,
 		client:       &http.Client{Timeout: 10 * time.Second},
 		buffer:       make([]model.TraceEvent, 0, batchSize),
@@ -81,6 +84,7 @@ func NewTraceService(collectorURL string, batchSize int, flushInterval time.Dura
 	}
 	logger.Debug("Trace 上报服务启动中",
 		zap.String("collector_url", collectorURL),
+		zap.String("service_name", serviceName),
 		zap.Int("batch_size", batchSize),
 		zap.Duration("flush_interval", flushInterval),
 	)
@@ -93,6 +97,14 @@ func NewTraceService(collectorURL string, batchSize int, flushInterval time.Dura
 func (s *traceService) Report(events []model.TraceEvent) {
 	if len(events) == 0 {
 		return
+	}
+
+	// 事件没带服务名时用本服务配置的 service_name 兜底；
+	// 外部上报方自带 service_name 时以它为准（例如网关转发别的服务的事件）。
+	for i := range events {
+		if events[i].ServiceName == "" {
+			events[i].ServiceName = s.serviceName
+		}
 	}
 
 	// 本地留痕，保证即便采集端不可用也有可查记录。
@@ -161,6 +173,7 @@ func logEvents(events []model.TraceEvent) {
 	var errs, warns int
 	traces := make(map[string]struct{}, 8)
 	modules := make(map[string]int, 4)
+	services := make(map[string]struct{}, 2)
 	for _, e := range events {
 		switch e.Level {
 		case eventLevelError:
@@ -170,16 +183,27 @@ func logEvents(events []model.TraceEvent) {
 		}
 		traces[e.TraceID] = struct{}{}
 		modules[e.Module]++
+		services[e.ServiceName] = struct{}{}
 	}
 	logger.Debug("收到 Trace 事件",
 		zap.Int("count", len(events)),
 		zap.Int("traces", len(traces)),
 		zap.Any("modules", modules),
+		zap.Strings("services", keysOf(services)),
 		zap.Int("warn", warns),
 		zap.Int("error", errs),
 		// 抽样一条，便于确认字段格式；完整内容以采集端为准。
 		zap.String("sample", events[0].Message),
 	)
+}
+
+// keysOf 取集合的键，转成 zap.Strings 可接受的切片，避免 map[struct{}] 序列化成空对象。
+func keysOf(set map[string]struct{}) []string {
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // logErrorEvents 把错误级别的事件逐条记 Error 日志。
@@ -190,6 +214,7 @@ func logErrorEvents(events []model.TraceEvent) {
 			continue
 		}
 		logger.Error("Trace 事件标记为错误",
+			zap.String("service_name", e.ServiceName),
 			zap.String("trace_id", e.TraceID),
 			zap.String("span_id", e.SpanID),
 			zap.String("module", e.Module),
@@ -255,6 +280,21 @@ func batchURL(events []model.TraceEvent) string {
 	return url
 }
 
+// batchServiceName 与 batchURL 同理：整批来自同一服务时才提升到请求体顶层，
+// 混合批次返回空串，采集端按事件自身的 service_name 归类。
+func batchServiceName(events []model.TraceEvent) string {
+	if len(events) == 0 {
+		return ""
+	}
+	name := events[0].ServiceName
+	for _, e := range events[1:] {
+		if e.ServiceName != name {
+			return ""
+		}
+	}
+	return name
+}
+
 // flush 将一批事件 POST 到采集端。
 //
 // 发送失败会记录错误日志（含失败原因分类与连续失败次数）并丢弃该批，避免阻塞调用方；
@@ -265,9 +305,13 @@ func (s *traceService) flush(events []model.TraceEvent) {
 	}
 
 	start := time.Now()
-	// 事件自身的 url 由上报端/span 转换时补齐；这里把整批一致的 url 提升到请求体顶层，
-	// 采集端既能按顶层归类，也能按事件逐条归类。
-	body, err := json.Marshal(model.TraceReportRequest{URL: batchURL(events), Events: events})
+	// 事件自身的 service_name 与 url 由上报端/span 转换时补齐；
+	// 这里把整批一致的字段提升到请求体顶层，采集端既能按顶层归类，也能按事件逐条归类。
+	body, err := json.Marshal(model.TraceReportRequest{
+		ServiceName: batchServiceName(events),
+		URL:         batchURL(events),
+		Events:      events,
+	})
 	if err != nil {
 		s.reportFailure(reasonEncodeFailed, err, len(events), 0, "", time.Since(start))
 		return

@@ -39,9 +39,12 @@ func (c *TraceController) Report(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "events must not be empty", http.StatusBadRequest)
 		return
 	}
-	// 顶层 url 是整批的默认值：事件自己带了就以事件为准，没带才回填，
-	// 保证每条事件都挂得上链路入口，采集端不必再反查所属接口。
+	// 顶层 service_name 与 url 是整批的默认值：事件自己带了就以事件为准，没带才回填，
+	// 保证每条事件都能归到具体服务与链路入口，采集端不必再反查。
 	for i := range req.Events {
+		if req.Events[i].ServiceName == "" {
+			req.Events[i].ServiceName = req.ServiceName
+		}
 		if req.Events[i].URL == "" {
 			req.Events[i].URL = req.URL
 		}
@@ -49,6 +52,7 @@ func (c *TraceController) Report(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("Trace 事件接收成功",
 		append(fields,
 			zap.Int("count", len(req.Events)),
+			zap.String("service_name", req.ServiceName),
 			zap.String("url", req.URL),
 		)...)
 

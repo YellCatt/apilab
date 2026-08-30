@@ -208,6 +208,7 @@ const swaggerDoc = `{
     "model.TraceReportRequest": {
       "type": "object",
       "properties": {
+        "service_name": { "type": "string", "description": "整批事件共属的服务名，事件未带 service_name 时用它兜底" },
         "url": { "type": "string", "description": "整批事件共属的请求 URL，事件未带 url 时用它兜底" },
         "events": {
           "type": "array",
@@ -218,6 +219,7 @@ const swaggerDoc = `{
     "model.TraceEvent": {
       "type": "object",
       "properties": {
+        "service_name": { "type": "string", "description": "产生该事件的服务名" },
         "trace_id": { "type": "string" },
         "span_id": { "type": "string" },
         "parent_span_id": { "type": "string" },
