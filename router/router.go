@@ -9,7 +9,7 @@ import (
 )
 
 // NewRouter 创建并配置 HTTP 请求路由器，注册所有 API 路由及 Swagger 文档。
-func NewRouter(userController *controller.UserController, statusController *controller.StatusController) *http.ServeMux {
+func NewRouter(userController *controller.UserController, statusController *controller.StatusController, traceController *controller.TraceController) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -25,6 +25,8 @@ func NewRouter(userController *controller.UserController, statusController *cont
 	mux.HandleFunc("GET /api/users/{id}", userController.GetUserByID)
 	mux.HandleFunc("PUT /api/users/{id}", userController.UpdateUser)
 	mux.HandleFunc("DELETE /api/users/{id}", userController.DeleteUser)
+
+	mux.HandleFunc("POST /api/traces/report", traceController.Report)
 
 	mux.Handle("/swagger/", httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
@@ -50,6 +52,31 @@ const swaggerDoc = `{
   "host": "localhost:8084",
   "basePath": "/",
   "paths": {
+    "/api/traces/report": {
+      "post": {
+        "description": "Report trace events, buffered and batch-forwarded to the collector",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "tags": ["traces"],
+        "summary": "Report trace events",
+        "parameters": [
+          {
+            "description": "Trace events payload",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/model.TraceReportRequest" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": { "$ref": "#/definitions/model.TraceReportResponse" }
+          },
+          "400": { "description": "Bad Request" }
+        }
+      }
+    },
     "/api/users": {
       "get": {
         "description": "Get all users",
@@ -168,6 +195,38 @@ const swaggerDoc = `{
     }
   },
   "definitions": {
+    "model.TraceReportRequest": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/model.TraceEvent" }
+        }
+      }
+    },
+    "model.TraceEvent": {
+      "type": "object",
+      "properties": {
+        "trace_id": { "type": "string" },
+        "span_id": { "type": "string" },
+        "parent_span_id": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "level": { "type": "string" },
+        "module": { "type": "string" },
+        "event": { "type": "string" },
+        "message": { "type": "string" },
+        "params": { "type": "object" },
+        "error_message": { "type": "string" }
+      }
+    },
+    "model.TraceReportResponse": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "integer" },
+        "message": { "type": "string" },
+        "count": { "type": "integer" }
+      }
+    },
     "model.CreateUserRequest": {
       "type": "object",
       "properties": {

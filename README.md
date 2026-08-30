@@ -58,6 +58,7 @@ CGO_ENABLED=0 go build -o gapi
 | POST | /users | 创建用户 |
 | PUT | /users/:id | 更新用户 |
 | DELETE | /users/:id | 删除用户 |
+| POST | /api/traces/report | 上报 Trace 事件（本地记日志 + 批量转发采集端） |
 
 ### 示例请求
 
@@ -163,6 +164,11 @@ database:
 log:
   path: ./logs
   level: info
+
+collector:
+  url: http://localhost:4318/v1/traces
+  batch_size: 1000
+  flush_interval: 30s
 ```
 
 | 配置项 | 说明 | 默认值 |
@@ -171,6 +177,9 @@ log:
 | database.path | SQLite 数据库路径 | ./data.db |
 | log.path | 日志目录 | ./logs |
 | log.level | 日志级别 | info |
+| collector.url | Trace 采集端接收地址 | http://localhost:4318/v1/traces |
+| collector.batch_size | 缓冲达到该数量立即批量上报 | 1000 |
+| collector.flush_interval | 定时批量上报间隔 | 30s |
 
 ## 项目结构
 

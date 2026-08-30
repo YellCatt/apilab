@@ -38,7 +38,11 @@ func main() {
 	statusService := service.NewStatusService()
 	statusController := controller.NewStatusController(statusService)
 
-	r := router.NewRouter(userController, statusController)
+	traceService := service.NewTraceService(config.GetCollectorURL(), config.GetCollectorBatchSize(), config.GetCollectorFlushInterval())
+	defer traceService.Stop()
+	traceController := controller.NewTraceController(traceService)
+
+	r := router.NewRouter(userController, statusController, traceController)
 
 	port := config.GetServerPort()
 	logger.Info("server starting", zap.Int("port", port))

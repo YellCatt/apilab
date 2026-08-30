@@ -4,17 +4,19 @@ package config
 import (
 	"log"
 	"path/filepath"
+	"time"
 
 	"os"
 
 	"gopkg.in/yaml.v3"
 )
 
-// Config 应用程序的根配置结构，聚合了服务、数据库和日志配置。
+// Config 应用程序的根配置结构，聚合了服务、数据库、日志和采集端配置。
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`   // 服务端配置
-	Database DatabaseConfig `yaml:"database"` // 数据库配置
-	Log      LogConfig      `yaml:"log"`      // 日志配置
+	Server    ServerConfig    `yaml:"server"`    // 服务端配置
+	Database  DatabaseConfig  `yaml:"database"`  // 数据库配置
+	Log       LogConfig       `yaml:"log"`       // 日志配置
+	Collector CollectorConfig `yaml:"collector"` // 采集端配置
 }
 
 // ServerConfig 服务端相关配置，包括监听端口。
@@ -31,6 +33,13 @@ type DatabaseConfig struct {
 type LogConfig struct {
 	Path  string `yaml:"path"`  // 日志文件存放目录
 	Level string `yaml:"level"` // 日志输出级别（debug/info/warn/error）
+}
+
+// CollectorConfig 采集端配置，用于批量上报 trace 事件。
+type CollectorConfig struct {
+	URL           string `yaml:"url"`           // 采集端接收地址（如 OTEL Collector / 日志采集服务）
+	BatchSize     int    `yaml:"batch_size"`    // 缓冲达到该数量时立即批量上报
+	FlushInterval string `yaml:"flush_interval"` // 定时刷新间隔（如 30s）
 }
 
 var cfg Config // 全局配置实例，由 LoadConfig 加载
@@ -71,6 +80,11 @@ func createDefaultConfig(path string) error {
 			Path:  "./logs",
 			Level: "info",
 		},
+		Collector: CollectorConfig{
+			URL:           "http://localhost:4318/v1/traces",
+			BatchSize:     1000,
+			FlushInterval: "30s",
+		},
 	}
 
 	data, err := yaml.Marshal(&defaultCfg)
@@ -103,6 +117,28 @@ func GetLogPath() string {
 // GetLogLevel 返回当前配置的日志级别。
 func GetLogLevel() string {
 	return cfg.Log.Level
+}
+
+// GetCollectorURL 返回采集端接收地址。
+func GetCollectorURL() string {
+	return cfg.Collector.URL
+}
+
+// GetCollectorBatchSize 返回批量上报的缓冲阈值，未配置时默认 1000。
+func GetCollectorBatchSize() int {
+	if cfg.Collector.BatchSize <= 0 {
+		return 1000
+	}
+	return cfg.Collector.BatchSize
+}
+
+// GetCollectorFlushInterval 返回定时刷新间隔，未配置或解析失败时默认 30 秒。
+func GetCollectorFlushInterval() time.Duration {
+	d, err := time.ParseDuration(cfg.Collector.FlushInterval)
+	if err != nil || d <= 0 {
+		return 30 * time.Second
+	}
+	return d
 }
 
 // InitDirectories 初始化所需的日志目录和数据库目录。

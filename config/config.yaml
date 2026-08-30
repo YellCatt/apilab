@@ -7,3 +7,8 @@ database:
 log:
   path: ./logs
   level: info
+
+collector:
+  url: http://localhost:4318/v1/traces
+  batch_size: 1000
+  flush_interval: 30s
