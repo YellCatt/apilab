@@ -164,9 +164,12 @@ database:
 log:
   path: ./logs
   level: info
+  mode: single
+  levels: []
+  disable_console: false
 
 collector:
-  url: http://localhost:8086/api/traces/report
+  url: http://localhost:4318/api/traces
   batch_size: 1000
   flush_interval: 30s
 ```
@@ -177,7 +180,10 @@ collector:
 | database.path | SQLite 数据库路径 | ./data.db |
 | log.path | 日志目录 | ./logs |
 | log.level | 日志级别 | info |
-| collector.url | Trace 采集端接收地址 | http://localhost:8086/api/traces/report |
+| log.mode | 日志输出模式（single/split/range） | single |
+| log.levels | 级别白名单，非空时优先于 level | [] |
+| log.disable_console | 是否关闭控制台输出 | false |
+| collector.url | Trace 采集端接收地址 | http://localhost:4318/api/traces |
 | collector.batch_size | 缓冲达到该数量立即批量上报 | 1000 |
 | collector.flush_interval | 定时批量上报间隔 | 30s |
 

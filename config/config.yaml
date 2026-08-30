@@ -7,8 +7,14 @@ database:
 log:
   path: ./logs
   level: info
+  # 输出模式：single=全部写入 app.log（默认） / split=按级别分文件互不重叠 / range=按级别分文件含该级别及以上
+  mode: single
+  # 级别白名单，非空时优先于 level，例如 [warn, error]
+  levels: []
+  # 是否关闭控制台输出，容器场景日志已交给 stdout 收集时可设为 true
+  disable_console: false
 
 collector:
-  url: http://localhost:8086/api/traces/report
+  url: http://localhost:4318/api/traces
   batch_size: 1000
   flush_interval: 30s

@@ -29,16 +29,20 @@ type DatabaseConfig struct {
 	Path string `yaml:"path"` // 数据库文件路径
 }
 
-// LogConfig 日志配置，包括日志目录和日志级别。
+// LogConfig 日志配置，包括日志目录、日志级别、输出模式与级别白名单。
 type LogConfig struct {
 	Path  string `yaml:"path"`  // 日志文件存放目录
 	Level string `yaml:"level"` // 日志输出级别（debug/info/warn/error）
+	Mode  string `yaml:"mode"`  // 输出模式（single/split/range），缺省为 single
+	// Levels 级别白名单，非空时优先于 Level，例如 []string{"warn", "error"}。
+	Levels         []string `yaml:"levels"`
+	DisableConsole bool     `yaml:"disable_console"` // 是否关闭控制台输出
 }
 
 // CollectorConfig 采集端配置，用于批量上报 trace 事件。
 type CollectorConfig struct {
-	URL           string `yaml:"url"`           // 采集端接收地址（如 OTEL Collector / 日志采集服务）
-	BatchSize     int    `yaml:"batch_size"`    // 缓冲达到该数量时立即批量上报
+	URL           string `yaml:"url"`            // 采集端接收地址（如 OTEL Collector / 日志采集服务）
+	BatchSize     int    `yaml:"batch_size"`     // 缓冲达到该数量时立即批量上报
 	FlushInterval string `yaml:"flush_interval"` // 定时刷新间隔（如 30s）
 }
 
@@ -77,11 +81,14 @@ func createDefaultConfig(path string) error {
 			Path: "./data.db",
 		},
 		Log: LogConfig{
-			Path:  "./logs",
-			Level: "info",
+			Path:           "./logs",
+			Level:          "info",
+			Mode:           "single",
+			Levels:         nil,
+			DisableConsole: false,
 		},
 		Collector: CollectorConfig{
-			URL:           "http://localhost:8086/api/traces/report",
+			URL:           "http://localhost:4318/api/traces",
 			BatchSize:     1000,
 			FlushInterval: "30s",
 		},
@@ -119,10 +126,25 @@ func GetLogLevel() string {
 	return cfg.Log.Level
 }
 
-// GetCollectorURL 返回采集端接收地址，未配置时默认 http://localhost:8086/api/traces/report。
+// GetLogMode 返回日志输出模式（single/split/range），未配置时由 logger 兜底为 single。
+func GetLogMode() string {
+	return cfg.Log.Mode
+}
+
+// GetLogLevels 返回日志级别白名单，非空时优先于 GetLogLevel。
+func GetLogLevels() []string {
+	return cfg.Log.Levels
+}
+
+// IsLogConsoleDisabled 返回是否关闭控制台日志输出。
+func IsLogConsoleDisabled() bool {
+	return cfg.Log.DisableConsole
+}
+
+// GetCollectorURL 返回采集端接收地址，未配置时默认 http://localhost:4318/api/traces。
 func GetCollectorURL() string {
 	if cfg.Collector.URL == "" {
-		return "http://localhost:8086/api/traces/report"
+		return "http://localhost:4318/api/traces"
 	}
 	return cfg.Collector.URL
 }

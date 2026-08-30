@@ -24,10 +24,16 @@ func main() {
 		log.Fatalf("failed to init directories: %v", err)
 	}
 
-	if err := logger.Init(config.GetLogPath(), config.GetLogLevel()); err != nil {
+	if err := logger.Init(logger.Options{
+		Dir:            config.GetLogPath(),
+		Level:          config.GetLogLevel(),
+		Mode:           config.GetLogMode(),
+		Levels:         config.GetLogLevels(),
+		DisableConsole: config.IsLogConsoleDisabled(),
+	}); err != nil {
 		log.Fatalf("failed to init logger: %v", err)
 	}
-	defer logger.Sync()
+	defer logger.Close()
 
 	db := config.NewDatabase()
 
