@@ -2,7 +2,10 @@
 package service
 
 import (
+	"context"
+
 	"github.com/YellCatt/apilab/logger"
+	"github.com/YellCatt/apilab/middleware"
 	"github.com/YellCatt/apilab/model"
 	"github.com/YellCatt/apilab/repository"
 	"go.uber.org/zap"
@@ -10,11 +13,11 @@ import (
 
 // UserService 用户业务逻辑接口。
 type UserService interface {
-	CreateUser(req *model.CreateUserRequest) (*model.User, error)
-	GetUserByID(id uint) (*model.User, error)
-	GetAllUsers() ([]model.User, error)
-	UpdateUser(id uint, req *model.UpdateUserRequest) (*model.User, error)
-	DeleteUser(id uint) error
+	CreateUser(ctx context.Context, req *model.CreateUserRequest) (*model.User, error)
+	GetUserByID(ctx context.Context, id uint) (*model.User, error)
+	GetAllUsers(ctx context.Context) ([]model.User, error)
+	UpdateUser(ctx context.Context, id uint, req *model.UpdateUserRequest) (*model.User, error)
+	DeleteUser(ctx context.Context, id uint) error
 }
 
 // userService UserService 的默认实现。
@@ -28,14 +31,17 @@ func NewUserService(repo repository.UserRepository) UserService {
 }
 
 // CreateUser 创建新用户。
-func (s *userService) CreateUser(req *model.CreateUserRequest) (*model.User, error) {
+func (s *userService) CreateUser(ctx context.Context, req *model.CreateUserRequest) (*model.User, error) {
+	ctx, end := middleware.StartSpan(ctx, "service", "user.create", "创建用户", nil)
+	defer end(map[string]interface{}{"name": req.Name, "age": req.Age})
+
 	logger.Debug("服务层：创建用户", zap.String("name", req.Name), zap.Int("age", req.Age))
 
 	user := &model.User{
 		Name: req.Name,
 		Age:  req.Age,
 	}
-	err := s.repo.Create(user)
+	err := s.repo.Create(ctx, user)
 	if err != nil {
 		logger.Error("服务层：创建用户失败", zap.String("name", req.Name), zap.Error(err))
 		return nil, err
@@ -45,10 +51,13 @@ func (s *userService) CreateUser(req *model.CreateUserRequest) (*model.User, err
 }
 
 // GetUserByID 根据 ID 查询用户。
-func (s *userService) GetUserByID(id uint) (*model.User, error) {
+func (s *userService) GetUserByID(ctx context.Context, id uint) (*model.User, error) {
+	ctx, end := middleware.StartSpan(ctx, "service", "user.get_by_id", "根据 ID 查询用户", map[string]interface{}{"id": id})
+	defer end()
+
 	logger.Debug("服务层：查询用户", zap.Uint("id", id))
 
-	user, err := s.repo.GetByID(id)
+	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		logger.Error("服务层：查询用户失败", zap.Uint("id", id), zap.Error(err))
 		return nil, err
@@ -61,10 +70,13 @@ func (s *userService) GetUserByID(id uint) (*model.User, error) {
 }
 
 // GetAllUsers 查询所有用户。
-func (s *userService) GetAllUsers() ([]model.User, error) {
+func (s *userService) GetAllUsers(ctx context.Context) ([]model.User, error) {
+	ctx, end := middleware.StartSpan(ctx, "service", "user.get_all", "查询全部用户", nil)
+	defer end()
+
 	logger.Debug("服务层：查询用户列表")
 
-	users, err := s.repo.GetAll()
+	users, err := s.repo.GetAll(ctx)
 	if err != nil {
 		logger.Error("服务层：查询用户列表失败", zap.Error(err))
 		return nil, err
@@ -74,11 +86,14 @@ func (s *userService) GetAllUsers() ([]model.User, error) {
 }
 
 // UpdateUser 更新指定用户，仅更新请求中非空的字段。
-func (s *userService) UpdateUser(id uint, req *model.UpdateUserRequest) (*model.User, error) {
+func (s *userService) UpdateUser(ctx context.Context, id uint, req *model.UpdateUserRequest) (*model.User, error) {
+	ctx, end := middleware.StartSpan(ctx, "service", "user.update", "更新用户", map[string]interface{}{"id": id})
+	defer end(map[string]interface{}{"name": req.Name, "age": req.Age})
+
 	logger.Debug("服务层：更新用户",
 		zap.Uint("id", id), zap.String("name", req.Name), zap.Int("age", req.Age))
 
-	user, err := s.repo.GetByID(id)
+	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		logger.Error("服务层：更新前加载用户失败", zap.Uint("id", id), zap.Error(err))
 		return nil, err
@@ -103,7 +118,7 @@ func (s *userService) UpdateUser(id uint, req *model.UpdateUserRequest) (*model.
 		zap.Uint("id", id), zap.Strings("fields", applied),
 		zap.String("old_name", oldName), zap.Int("old_age", oldAge))
 
-	err = s.repo.Update(user)
+	err = s.repo.Update(ctx, user)
 	if err != nil {
 		logger.Error("服务层：更新用户失败", zap.Uint("id", id), zap.Error(err))
 		return nil, err
@@ -113,10 +128,13 @@ func (s *userService) UpdateUser(id uint, req *model.UpdateUserRequest) (*model.
 }
 
 // DeleteUser 根据 ID 删除用户。
-func (s *userService) DeleteUser(id uint) error {
+func (s *userService) DeleteUser(ctx context.Context, id uint) error {
+	ctx, end := middleware.StartSpan(ctx, "service", "user.delete", "删除用户", map[string]interface{}{"id": id})
+	defer end()
+
 	logger.Debug("服务层：删除用户", zap.Uint("id", id))
 
-	err := s.repo.Delete(id)
+	err := s.repo.Delete(ctx, id)
 	if err != nil {
 		logger.Error("服务层：删除用户失败", zap.Uint("id", id), zap.Error(err))
 		return err

@@ -25,6 +25,9 @@ func NewUserController(service service.UserService) *UserController {
 
 // CreateUser 处理 POST /api/users 请求，创建新用户。
 func (c *UserController) CreateUser(w http.ResponseWriter, r *http.Request) {
+	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.create", "处理创建用户请求", nil)
+	defer end()
+
 	fields := middleware.Fields(r)
 	logger.Debug("收到创建用户请求", fields...)
 
@@ -38,7 +41,7 @@ func (c *UserController) CreateUser(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("创建用户请求体解析完成",
 		append(fields, zap.String("name", req.Name), zap.Int("age", req.Age))...)
 
-	user, err := c.service.CreateUser(&req)
+	user, err := c.service.CreateUser(ctx, &req)
 	if err != nil {
 		logger.Error("创建用户失败", append(fields, zap.String("name", req.Name), zap.Error(err))...)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -56,6 +59,9 @@ func (c *UserController) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 // GetUserByID 处理 GET /api/users/{id} 请求，根据 ID 查询用户。
 func (c *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
+	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.get_by_id", "处理查询用户请求", nil)
+	defer end()
+
 	idStr := r.PathValue("id")
 	fields := append(middleware.Fields(r), zap.String("id_param", idStr))
 	logger.Debug("收到查询用户请求", fields...)
@@ -67,7 +73,7 @@ func (c *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := c.service.GetUserByID(uint(id))
+	user, err := c.service.GetUserByID(ctx, uint(id))
 	if err != nil {
 		logger.Error("查询用户失败", append(fields, zap.Uint64("id", id), zap.Error(err))...)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -90,10 +96,13 @@ func (c *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
 
 // GetAllUsers 处理 GET /api/users 请求，查询所有用户。
 func (c *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
+	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.get_all", "处理查询用户列表请求", nil)
+	defer end()
+
 	fields := middleware.Fields(r)
 	logger.Debug("收到查询用户列表请求", fields...)
 
-	users, err := c.service.GetAllUsers()
+	users, err := c.service.GetAllUsers(ctx)
 	if err != nil {
 		logger.Error("查询用户列表失败", append(fields, zap.Error(err))...)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -111,6 +120,9 @@ func (c *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUser 处理 PUT /api/users/{id} 请求，更新指定用户。
 func (c *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.update", "处理更新用户请求", nil)
+	defer end()
+
 	idStr := r.PathValue("id")
 	fields := append(middleware.Fields(r), zap.String("id_param", idStr))
 	logger.Debug("收到更新用户请求", fields...)
@@ -132,7 +144,7 @@ func (c *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("更新用户请求体解析完成",
 		append(fields, zap.Uint64("id", id), zap.String("name", req.Name), zap.Int("age", req.Age))...)
 
-	user, err := c.service.UpdateUser(uint(id), &req)
+	user, err := c.service.UpdateUser(ctx, uint(id), &req)
 	if err != nil {
 		logger.Error("更新用户失败", append(fields, zap.Uint64("id", id), zap.Error(err))...)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -155,6 +167,9 @@ func (c *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUser 处理 DELETE /api/users/{id} 请求，删除指定用户。
 func (c *UserController) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.delete", "处理删除用户请求", nil)
+	defer end()
+
 	idStr := r.PathValue("id")
 	fields := append(middleware.Fields(r), zap.String("id_param", idStr))
 	logger.Debug("收到删除用户请求", fields...)
@@ -166,7 +181,7 @@ func (c *UserController) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = c.service.DeleteUser(uint(id))
+	err = c.service.DeleteUser(ctx, uint(id))
 	if err != nil {
 		logger.Error("删除用户失败", append(fields, zap.Uint64("id", id), zap.Error(err))...)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

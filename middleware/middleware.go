@@ -41,7 +41,8 @@ type Reporter interface {
 }
 
 // RequestLog 为请求注入 ID，并在进入/离开处理器时打印调试与访问日志。
-// reporter 非 nil 时，请求结束还会生成一条 trace 事件交给它缓冲、批量转发采集端。
+// reporter 非 nil 时，会生成 start/end 两个 trace 事件交给它缓冲、批量转发采集端；
+// 同时把 TraceContext 注入 request context，供 controller/service/repository 创建子 span。
 func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := requestIDFromHeader(r)
@@ -50,15 +51,36 @@ func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 		r = r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id))
 
 		start := time.Now()
+		spanID := newSpanID()
+		path := r.URL.Path
+		query := r.URL.RawQuery
+
+		// 注入 trace 上下文，供后续 controller/service/repository 创建子 span。
+		tc := &TraceContext{
+			TraceID:    id,
+			SpanID:     spanID,
+			Reporter:   reporter,
+			StartTime:  start,
+			RemoteAddr: r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+		}
+		r = r.WithContext(WithTraceContext(r.Context(), tc))
+
 		logger.Debug("请求开始处理",
 			zap.String("request_id", id),
 			zap.String("method", r.Method),
-			zap.String("path", r.URL.Path),
-			zap.String("query", r.URL.RawQuery),
+			zap.String("path", path),
+			zap.String("query", query),
 			zap.String("remote_addr", r.RemoteAddr),
 			zap.Int64("content_length", r.ContentLength),
 			zap.String("user_agent", r.UserAgent()),
 		)
+
+		// 请求开始时上报 start 事件，让采集端知道 span 的起点。
+		if reporter != nil && !shouldSkipTrace(path) {
+			startEvent := buildTraceEvent(r, id, spanID, "", 0, 0, start, "start")
+			go reporter.Report([]model.TraceEvent{startEvent})
+		}
 
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next(rec, r)
@@ -67,7 +89,7 @@ func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 		fields := []zap.Field{
 			zap.String("request_id", id),
 			zap.String("method", r.Method),
-			zap.String("path", r.URL.Path),
+			zap.String("path", path),
 			zap.Int("status", rec.status),
 			zap.Duration("cost", cost),
 			zap.Int("bytes", rec.bytes),
@@ -83,10 +105,10 @@ func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 			logger.Info("请求处理完成", fields...)
 		}
 
-		if reporter != nil && !shouldSkipTrace(r.URL.Path) {
-			event := buildTraceEvent(r, id, rec.status, cost, rec.bytes)
-			// 异步上报：flush 走到网络 IO，不能让它拖慢请求响应。
-			go reporter.Report([]model.TraceEvent{event})
+		// 请求结束时上报 end 事件，让采集端闭合 span 并计算耗时。
+		if reporter != nil && !shouldSkipTrace(path) {
+			endEvent := buildTraceEvent(r, id, spanID, "", rec.status, rec.bytes, time.Now(), "end")
+			go reporter.Report([]model.TraceEvent{endEvent})
 		}
 	}
 }
@@ -101,39 +123,63 @@ func shouldSkipTrace(path string) bool {
 	return false
 }
 
-// buildTraceEvent 把一次请求的处理结果封装成 trace 事件。
-// trace_id 沿用请求 ID，这样采集端与本地日志能按同一 ID 对上。
-func buildTraceEvent(r *http.Request, requestID string, status int, cost time.Duration, bytes int) model.TraceEvent {
+// buildTraceEvent 把一次请求封装成 start 或 end trace 事件。
+// trace_id 沿用请求 ID，span_id 使用传入的根 span；event 为 "start"/"end"，
+// 让采集端识别 span 的起点与终点并计算 duration。
+func buildTraceEvent(r *http.Request, requestID, spanID, parentSpanID string, status, bytes int, ts time.Time, event string) model.TraceEvent {
 	query := r.URL.RawQuery
-	message := r.Method + " " + r.URL.Path + " " + strconv.Itoa(status)
+	message := r.Method + " " + r.URL.Path
+	if status > 0 {
+		message += " " + strconv.Itoa(status)
+	}
 	if query != "" {
 		message += "?" + query
 	}
 
-	event := model.TraceEvent{
-		TraceID:   requestID,
-		SpanID:    newSpanID(),
-		Timestamp: time.Now(),
-		Level:     traceLevel(status, cost),
-		Module:    moduleFromPath(r.URL.Path),
-		Event:     "http.request",
-		Message:   message,
+	cost := time.Duration(0)
+	if event == "end" {
+		// end 事件计算从请求开始到现在的时间。
+		// 通过 TraceContext 获取开始时间更精确。
+		if tc := TraceContextFrom(r.Context()); tc != nil {
+			cost = time.Since(tc.StartTime)
+		}
+	}
+
+	te := model.TraceEvent{
+		TraceID:      requestID,
+		SpanID:       spanID,
+		ParentSpanID: parentSpanID,
+		Timestamp:    ts,
+		Level:        traceLevel(status, cost),
+		Module:       moduleFromPath(r.URL.Path),
+		Event:        event,
+		Message:      message,
 		Params: map[string]interface{}{
-			"request_id":     requestID,
-			"method":         r.Method,
-			"path":           r.URL.Path,
-			"query":          query,
-			"status":         status,
-			"cost_ms":        math.Round(float64(cost.Microseconds())/100) / 10,
-			"response_bytes": bytes,
-			"remote_addr":    r.RemoteAddr,
-			"user_agent":     r.UserAgent(),
+			"request_id": requestID,
+			"method":     r.Method,
+			"path":       r.URL.Path,
+			"query":      query,
 		},
 	}
-	if status >= http.StatusInternalServerError {
-		event.ErrorMessage = http.StatusText(status)
+	if status > 0 {
+		te.Params["status"] = status
 	}
-	return event
+	if bytes > 0 || event == "end" {
+		te.Params["response_bytes"] = bytes
+	}
+	if cost > 0 {
+		te.Params["cost_ms"] = math.Round(float64(cost.Microseconds())/100) / 10
+	}
+	if r.RemoteAddr != "" {
+		te.Params["remote_addr"] = r.RemoteAddr
+	}
+	if r.UserAgent() != "" {
+		te.Params["user_agent"] = r.UserAgent()
+	}
+	if status >= http.StatusInternalServerError {
+		te.ErrorMessage = http.StatusText(status)
+	}
+	return te
 }
 
 // traceLevel 按响应状态码与耗时给出事件级别，与访问日志的级别判定保持一致。

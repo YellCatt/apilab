@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/YellCatt/apilab/logger"
+	"github.com/YellCatt/apilab/middleware"
 	"github.com/YellCatt/apilab/model"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -16,7 +18,7 @@ import (
 
 // StatusService 系统状态业务逻辑接口，提供实时系统监控数据。
 type StatusService interface {
-	GetStatus() (*model.SystemStatus, error)
+	GetStatus(ctx context.Context) (*model.SystemStatus, error)
 }
 
 // statusService StatusService 的默认实现，通过后台 goroutine 定时采样系统指标。
@@ -196,7 +198,10 @@ func logSampleError(metric string, err error) {
 }
 
 // GetStatus 获取当前系统状态快照，线程安全。
-func (s *statusService) GetStatus() (*model.SystemStatus, error) {
+func (s *statusService) GetStatus(ctx context.Context) (*model.SystemStatus, error) {
+	_, end := middleware.StartSpan(ctx, "service", "status.get", "获取系统状态", nil)
+	defer end()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.status == nil {

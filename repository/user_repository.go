@@ -2,9 +2,11 @@
 package repository
 
 import (
+	"context"
 	"time"
 
 	"github.com/YellCatt/apilab/logger"
+	"github.com/YellCatt/apilab/middleware"
 	"github.com/YellCatt/apilab/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -12,11 +14,11 @@ import (
 
 // UserRepository 用户数据访问接口，定义了用户的增删改查操作。
 type UserRepository interface {
-	Create(user *model.User) error
-	GetByID(id uint) (*model.User, error)
-	GetAll() ([]model.User, error)
-	Update(user *model.User) error
-	Delete(id uint) error
+	Create(ctx context.Context, user *model.User) error
+	GetByID(ctx context.Context, id uint) (*model.User, error)
+	GetAll(ctx context.Context) ([]model.User, error)
+	Update(ctx context.Context, user *model.User) error
+	Delete(ctx context.Context, id uint) error
 }
 
 // userRepository UserRepository 的默认实现，基于 GORM 操作 SQLite。
@@ -30,9 +32,16 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 }
 
 // Create 创建新用户记录。
-func (r *userRepository) Create(user *model.User) error {
+func (r *userRepository) Create(ctx context.Context, user *model.User) error {
+	ctx, end := middleware.StartSpan(ctx, "repository", "repo.user.create", "插入用户记录", map[string]interface{}{"name": user.Name})
+	defer end(map[string]interface{}{"rows_affected": 1})
+
 	start := time.Now()
+	sqlCtx, endSQL := middleware.StartSpan(ctx, "sql", "sql.insert", "INSERT INTO users", nil)
 	tx := r.db.Create(user)
+	endSQL(map[string]interface{}{"rows_affected": tx.RowsAffected})
+	_ = sqlCtx // 避免未使用变量提示
+
 	logger.Debug("数据库：新增用户",
 		zap.String("name", user.Name),
 		zap.Int("age", user.Age),
@@ -44,14 +53,22 @@ func (r *userRepository) Create(user *model.User) error {
 }
 
 // GetByID 根据 ID 查询用户，返回 nil,nil 表示未找到记录。
-func (r *userRepository) GetByID(id uint) (*model.User, error) {
+func (r *userRepository) GetByID(ctx context.Context, id uint) (*model.User, error) {
+	ctx, end := middleware.StartSpan(ctx, "repository", "repo.user.get_by_id", "按 ID 查询用户", map[string]interface{}{"id": id})
+	defer end()
+
 	var user model.User
 	start := time.Now()
+	sqlCtx, endSQL := middleware.StartSpan(ctx, "sql", "sql.select", "SELECT * FROM users WHERE id = ?", map[string]interface{}{"id": id})
 	tx := r.db.First(&user, id)
+	found := tx.Error == nil
+	endSQL(map[string]interface{}{"found": found})
+	_ = sqlCtx
+
 	logger.Debug("数据库：按 ID 查询用户",
 		zap.Uint("id", id),
 		zap.Duration("cost", time.Since(start)),
-		zap.Bool("found", tx.Error == nil),
+		zap.Bool("found", found),
 		zap.Error(dbError(tx.Error)),
 	)
 	if tx.Error == gorm.ErrRecordNotFound {
@@ -64,10 +81,17 @@ func (r *userRepository) GetByID(id uint) (*model.User, error) {
 }
 
 // GetAll 查询所有用户记录。
-func (r *userRepository) GetAll() ([]model.User, error) {
+func (r *userRepository) GetAll(ctx context.Context) ([]model.User, error) {
+	ctx, end := middleware.StartSpan(ctx, "repository", "repo.user.get_all", "查询全部用户", nil)
+	defer end()
+
 	var users []model.User
 	start := time.Now()
+	sqlCtx, endSQL := middleware.StartSpan(ctx, "sql", "sql.select", "SELECT * FROM users", nil)
 	tx := r.db.Find(&users)
+	endSQL(map[string]interface{}{"rows": len(users)})
+	_ = sqlCtx
+
 	logger.Debug("数据库：查询全部用户",
 		zap.Duration("cost", time.Since(start)),
 		zap.Int("rows", len(users)),
@@ -77,9 +101,16 @@ func (r *userRepository) GetAll() ([]model.User, error) {
 }
 
 // Update 更新指定用户的所有字段。
-func (r *userRepository) Update(user *model.User) error {
+func (r *userRepository) Update(ctx context.Context, user *model.User) error {
+	ctx, end := middleware.StartSpan(ctx, "repository", "repo.user.update", "更新用户记录", map[string]interface{}{"id": user.ID})
+	defer end(map[string]interface{}{"rows_affected": 1})
+
 	start := time.Now()
+	sqlCtx, endSQL := middleware.StartSpan(ctx, "sql", "sql.update", "UPDATE users", map[string]interface{}{"id": user.ID})
 	tx := r.db.Save(user)
+	endSQL(map[string]interface{}{"rows_affected": tx.RowsAffected})
+	_ = sqlCtx
+
 	logger.Debug("数据库：更新用户",
 		zap.Uint("id", user.ID),
 		zap.String("name", user.Name),
@@ -92,9 +123,16 @@ func (r *userRepository) Update(user *model.User) error {
 }
 
 // Delete 根据 ID 删除用户记录。
-func (r *userRepository) Delete(id uint) error {
+func (r *userRepository) Delete(ctx context.Context, id uint) error {
+	ctx, end := middleware.StartSpan(ctx, "repository", "repo.user.delete", "删除用户记录", map[string]interface{}{"id": id})
+	defer end(map[string]interface{}{"rows_affected": 1})
+
 	start := time.Now()
+	sqlCtx, endSQL := middleware.StartSpan(ctx, "sql", "sql.delete", "DELETE FROM users WHERE id = ?", map[string]interface{}{"id": id})
 	tx := r.db.Delete(&model.User{}, id)
+	endSQL(map[string]interface{}{"rows_affected": tx.RowsAffected})
+	_ = sqlCtx
+
 	logger.Debug("数据库：删除用户",
 		zap.Uint("id", id),
 		zap.Duration("cost", time.Since(start)),
