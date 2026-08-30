@@ -3,10 +3,10 @@ package config
 
 import (
 	"log"
-	"path/filepath"
-	"time"
-
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -139,6 +139,20 @@ func GetLogLevels() []string {
 // IsLogConsoleDisabled 返回是否关闭控制台日志输出。
 func IsLogConsoleDisabled() bool {
 	return cfg.Log.DisableConsole
+}
+
+// IsDebugEnabled 判断当前配置是否输出 debug 级别日志，用于决定 SQL 等高频调试日志是否开启。
+// levels 白名单非空时以它为准，否则看 level 是否为 debug。
+func IsDebugEnabled() bool {
+	if len(cfg.Log.Levels) > 0 {
+		for _, lv := range cfg.Log.Levels {
+			if strings.EqualFold(strings.TrimSpace(lv), "debug") {
+				return true
+			}
+		}
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(cfg.Log.Level), "debug")
 }
 
 // GetCollectorURL 返回采集端接收地址，未配置时默认 http://localhost:4318/api/traces。

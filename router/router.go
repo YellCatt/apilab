@@ -5,37 +5,43 @@ import (
 	"net/http"
 
 	"github.com/YellCatt/apilab/controller"
+	"github.com/YellCatt/apilab/logger"
+	"github.com/YellCatt/apilab/middleware"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
+	"go.uber.org/zap"
 )
 
 // NewRouter 创建并配置 HTTP 请求路由器，注册所有 API 路由及 Swagger 文档。
+// 每个路由都套上 middleware.RequestLog，统一输出请求级调试日志并注入请求 ID。
 func NewRouter(userController *controller.UserController, statusController *controller.StatusController, traceController *controller.TraceController) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /health", middleware.RequestLog(func(w http.ResponseWriter, r *http.Request) {
+		logger.Debug("health check", middleware.Fields(r)...)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","message":"Service is running"}`))
-	})
+	}))
 
-	mux.HandleFunc("GET /status", statusController.GetStatus)
+	mux.HandleFunc("GET /status", middleware.RequestLog(statusController.GetStatus))
 
-	mux.HandleFunc("POST /api/users", userController.CreateUser)
-	mux.HandleFunc("GET /api/users", userController.GetAllUsers)
-	mux.HandleFunc("GET /api/users/{id}", userController.GetUserByID)
-	mux.HandleFunc("PUT /api/users/{id}", userController.UpdateUser)
-	mux.HandleFunc("DELETE /api/users/{id}", userController.DeleteUser)
+	mux.HandleFunc("POST /api/users", middleware.RequestLog(userController.CreateUser))
+	mux.HandleFunc("GET /api/users", middleware.RequestLog(userController.GetAllUsers))
+	mux.HandleFunc("GET /api/users/{id}", middleware.RequestLog(userController.GetUserByID))
+	mux.HandleFunc("PUT /api/users/{id}", middleware.RequestLog(userController.UpdateUser))
+	mux.HandleFunc("DELETE /api/users/{id}", middleware.RequestLog(userController.DeleteUser))
 
-	mux.HandleFunc("POST /api/traces/report", traceController.Report)
+	mux.HandleFunc("POST /api/traces/report", middleware.RequestLog(traceController.Report))
 
-	mux.Handle("/swagger/", httpSwagger.Handler(
+	mux.Handle("/swagger/", middleware.RequestLog(httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
-	))
+	).ServeHTTP))
 
-	mux.HandleFunc("GET /swagger/doc.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /swagger/doc.json", middleware.RequestLog(func(w http.ResponseWriter, r *http.Request) {
+		logger.Debug("serving swagger doc", append(middleware.Fields(r), zap.Int("bytes", len(swaggerDoc)))...)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(swaggerDoc))
-	})
+	}))
 
 	return mux
 }

@@ -4,12 +4,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/YellCatt/apilab/logger"
 	"github.com/YellCatt/apilab/model"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
+	"go.uber.org/zap"
 )
 
 // StatusService 系统状态业务逻辑接口，提供实时系统监控数据。
@@ -42,22 +44,29 @@ func (s *statusService) sampler() {
 	defer ticker.Stop()
 
 	bootstrap := true
+	sampled := false // 是否已经产出过一份快照，用于只在首帧打印调试日志
 	for range ticker.C {
 		now := time.Now()
 
-		cpuInfo, _ := cpu.Info()
-		cpuPercents, _ := cpu.Percent(0, false)
-		memInfo, _ := mem.VirtualMemory()
-		hostInfo, _ := host.Info()
+		cpuInfo, err := cpu.Info()
+		logSampleError("cpu.info", err)
+		cpuPercents, err := cpu.Percent(0, false)
+		logSampleError("cpu.percent", err)
+		memInfo, err := mem.VirtualMemory()
+		logSampleError("mem", err)
+		hostInfo, err := host.Info()
+		logSampleError("host", err)
 
-		netCounters, _ := net.IOCounters(false)
+		netCounters, err := net.IOCounters(false)
+		logSampleError("net", err)
 		var recv, sent uint64
 		for _, n := range netCounters {
 			recv += n.BytesRecv
 			sent += n.BytesSent
 		}
 
-		diskCounters, _ := disk.IOCounters()
+		diskCounters, err := disk.IOCounters()
+		logSampleError("disk.io", err)
 		var dRead, dWrite uint64
 		for _, d := range diskCounters {
 			dRead += d.ReadBytes
@@ -65,7 +74,8 @@ func (s *statusService) sampler() {
 		}
 
 		// 分别统计每个分区/硬盘的容量
-		partitions, _ := disk.Partitions(true)
+		partitions, err := disk.Partitions(true)
+		logSampleError("disk.partitions", err)
 		diskStatuses := make([]model.DiskStatus, 0, len(partitions))
 		for _, p := range partitions {
 			usage, err := disk.Usage(p.Mountpoint)
@@ -163,6 +173,25 @@ func (s *statusService) sampler() {
 		lastDiskWrite = dWrite
 		lastSample = now
 		s.mu.Unlock()
+
+		// 采样每秒一次，调试日志只在首帧输出，避免日志被快照淹没。
+		if !sampled {
+			sampled = true
+			logger.Debug("system status snapshot ready",
+				zap.Float64("cpu_usage", status.Cpu.Usage),
+				zap.Float64("mem_usage", status.Memory.Usage),
+				zap.Int("disk_count", len(status.Disk)),
+				zap.Uint64("uptime", status.Uptime),
+				zap.Duration("cost", time.Since(now)),
+			)
+		}
+	}
+}
+
+// logSampleError 记录单个指标采样失败。这类失败不影响其它指标，用 Debug 级别即可。
+func logSampleError(metric string, err error) {
+	if err != nil {
+		logger.Debug("failed to sample metric", zap.String("metric", metric), zap.Error(err))
 	}
 }
 

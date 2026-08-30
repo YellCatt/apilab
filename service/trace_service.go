@@ -43,6 +43,11 @@ func NewTraceService(collectorURL string, batchSize int, flushInterval time.Dura
 		stopCh:       make(chan struct{}),
 		doneCh:       make(chan struct{}),
 	}
+	logger.Debug("trace service starting",
+		zap.String("collector_url", collectorURL),
+		zap.Int("batch_size", batchSize),
+		zap.Duration("flush_interval", flushInterval),
+	)
 	go s.flushLoop(flushInterval)
 	return s
 }
@@ -72,13 +77,23 @@ func (s *traceService) Report(events []model.TraceEvent) {
 
 	s.mu.Lock()
 	s.buffer = append(s.buffer, events...)
+	buffered := len(s.buffer)
 	// 攒够 batchSize 立即取出发送，不足部分由定时协程兜底
 	var batches [][]model.TraceEvent
 	for len(s.buffer) >= s.batchSize {
 		batches = append(batches, s.buffer[:s.batchSize])
 		s.buffer = append([]model.TraceEvent(nil), s.buffer[s.batchSize:]...)
 	}
+	remaining := len(s.buffer)
 	s.mu.Unlock()
+
+	logger.Debug("trace events buffered",
+		zap.Int("received", len(events)),
+		zap.Int("buffered", buffered),
+		zap.Int("remaining", remaining),
+		zap.Int("batches", len(batches)),
+		zap.Int("batch_size", s.batchSize),
+	)
 
 	for _, batch := range batches {
 		s.flush(batch)
@@ -111,6 +126,12 @@ func (s *traceService) flushBuffer() {
 	batch := s.buffer
 	s.buffer = nil
 	s.mu.Unlock()
+
+	if len(batch) == 0 {
+		logger.Debug("trace flush skipped, buffer empty")
+		return
+	}
+	logger.Debug("trace flush triggered by timer", zap.Int("count", len(batch)), zap.String("url", s.collectorURL))
 	s.flush(batch)
 }
 
@@ -120,11 +141,14 @@ func (s *traceService) flush(events []model.TraceEvent) {
 		return
 	}
 
+	start := time.Now()
 	body, err := json.Marshal(model.TraceReportRequest{Events: events})
 	if err != nil {
 		logger.Error("failed to marshal trace events", zap.Error(err), zap.Int("count", len(events)))
 		return
 	}
+	logger.Debug("trace batch encoded",
+		zap.Int("count", len(events)), zap.Int("bytes", len(body)), zap.Duration("cost", time.Since(start)))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -146,12 +170,16 @@ func (s *traceService) flush(events []model.TraceEvent) {
 
 	if resp.StatusCode >= http.StatusBadRequest {
 		logger.Error("collector returned error status",
-			zap.Int("status", resp.StatusCode), zap.Int("count", len(events)))
+			zap.Int("status", resp.StatusCode), zap.Int("count", len(events)),
+			zap.String("url", s.collectorURL), zap.Duration("cost", time.Since(start)))
 		return
 	}
 
+	logger.Debug("collector response received",
+		zap.Int("status", resp.StatusCode), zap.Int("count", len(events)),
+		zap.Duration("cost", time.Since(start)))
 	logger.Info("trace events flushed to collector",
-		zap.Int("count", len(events)), zap.String("url", s.collectorURL))
+		zap.Int("count", len(events)), zap.String("url", s.collectorURL), zap.Duration("cost", time.Since(start)))
 }
 
 // Stop 停止定时刷新协程并刷新剩余缓冲，用于程序退出前的优雅关闭。
@@ -161,6 +189,8 @@ func (s *traceService) Stop() {
 		return
 	default:
 	}
+	logger.Debug("trace service stopping, flushing remaining buffer")
 	close(s.stopCh)
 	<-s.doneCh
+	logger.Debug("trace service stopped")
 }

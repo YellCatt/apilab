@@ -6,7 +6,8 @@ database:
 
 log:
   path: ./logs
-  level: info
+  # 设为 debug 可打开请求级调试日志（含 SQL、缓冲状态、采样异常等），上线前改回 info
+  level: debug
   # 输出模式：single=全部写入 app.log（默认） / split=按级别分文件互不重叠 / range=按级别分文件含该级别及以上
   mode: single
   # 级别白名单，非空时优先于 level，例如 [warn, error]
