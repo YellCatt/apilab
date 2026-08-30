@@ -195,6 +195,7 @@ func logErrorEvents(events []model.TraceEvent) {
 			zap.String("module", e.Module),
 			zap.String("event", e.Event),
 			zap.String("message", e.Message),
+			zap.String("url", e.URL),
 			zap.String("error_message", e.ErrorMessage),
 			zap.Any("params", e.Params),
 		)
@@ -239,6 +240,21 @@ func (s *traceService) flushBuffer() {
 	s.flush(batch)
 }
 
+// batchURL 推断这批事件共属的请求 URL：全部一致才提升到请求体顶层。
+// 缓冲是跨请求合并的，混合批次返回空串，交由采集端按事件自身的 url 归类。
+func batchURL(events []model.TraceEvent) string {
+	if len(events) == 0 {
+		return ""
+	}
+	url := events[0].URL
+	for _, e := range events[1:] {
+		if e.URL != url {
+			return ""
+		}
+	}
+	return url
+}
+
 // flush 将一批事件 POST 到采集端。
 //
 // 发送失败会记录错误日志（含失败原因分类与连续失败次数）并丢弃该批，避免阻塞调用方；
@@ -249,7 +265,9 @@ func (s *traceService) flush(events []model.TraceEvent) {
 	}
 
 	start := time.Now()
-	body, err := json.Marshal(model.TraceReportRequest{Events: events})
+	// 事件自身的 url 由上报端/span 转换时补齐；这里把整批一致的 url 提升到请求体顶层，
+	// 采集端既能按顶层归类，也能按事件逐条归类。
+	body, err := json.Marshal(model.TraceReportRequest{URL: batchURL(events), Events: events})
 	if err != nil {
 		s.reportFailure(reasonEncodeFailed, err, len(events), 0, "", time.Since(start))
 		return

@@ -185,9 +185,19 @@ func (e *eventExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOn
 		return nil
 	}
 
+	// 先按 trace 收集根 span 的 URL：子 span（SQL、业务函数）自身没有 URL 信息，
+	// 但没有它采集端就无法把这条链路归到具体接口，所以由根 span 向下继承。
+	urls := make(map[string]string, len(spans))
+	for _, s := range spans {
+		if u := httpURL(s, attribute.NewSet(s.Attributes()...)); u != "" {
+			urls[s.SpanContext().TraceID().String()] = u
+		}
+	}
+
 	events := make([]model.TraceEvent, 0, len(spans)*2)
 	for _, s := range spans {
-		events = append(events, newEvent(s, "start"), newEvent(s, "end"))
+		url := urls[s.SpanContext().TraceID().String()]
+		events = append(events, newEvent(s, "start", url), newEvent(s, "end", url))
 	}
 
 	logger.Debug("导出 span 批次", zap.Int("spans", len(spans)), zap.Int("events", len(events)))
@@ -201,7 +211,8 @@ func (e *eventExporter) Shutdown(context.Context) error {
 }
 
 // newEvent 把一个 span 转成一条 start 或 end 事件。
-func newEvent(s sdktrace.ReadOnlySpan, event string) model.TraceEvent {
+// url 为空时退回 span 自身的 URL（HTTP 根 span 自带 http.target/route），子 span 通常为空。
+func newEvent(s sdktrace.ReadOnlySpan, event, url string) model.TraceEvent {
 	cost := s.EndTime().Sub(s.StartTime())
 	ts := s.StartTime()
 	if event == "end" {
@@ -210,6 +221,9 @@ func newEvent(s sdktrace.ReadOnlySpan, event string) model.TraceEvent {
 	// 属性集合只构造一次，后面几个判定函数都复用它。
 	set := attribute.NewSet(s.Attributes()...)
 
+	if url == "" {
+		url = httpURL(s, set)
+	}
 	module := rawModule(s, set)
 	te := model.TraceEvent{
 		TraceID:   s.SpanContext().TraceID().String(),
@@ -220,6 +234,7 @@ func newEvent(s sdktrace.ReadOnlySpan, event string) model.TraceEvent {
 		Event:     event,
 		Message:   spanMessage(s, set),
 		Params:    map[string]interface{}{},
+		URL:       url,
 	}
 	for _, kv := range s.Attributes() {
 		te.Params[string(kv.Key)] = attributeValue(kv.Value)
@@ -284,6 +299,15 @@ func targetOf(s sdktrace.ReadOnlySpan, set attribute.Set) string {
 		return r
 	}
 	return s.Name()
+}
+
+// httpURL 取 HTTP span 所属的请求路径，非 HTTP span 返回空串。
+// 只有根 span 带 http.method / http.route，因此它同时也是整条链路的 URL 来源。
+func httpURL(s sdktrace.ReadOnlySpan, set attribute.Set) string {
+	if attrString(set, keyHTTPMethod) == "" && attrString(set, keyHTTPRoute) == "" {
+		return ""
+	}
+	return targetOf(s, set)
 }
 
 // attrString 取属性的字符串值，属性不存在或不是字符串时返回空串。

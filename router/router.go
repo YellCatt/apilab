@@ -208,6 +208,7 @@ const swaggerDoc = `{
     "model.TraceReportRequest": {
       "type": "object",
       "properties": {
+        "url": { "type": "string", "description": "整批事件共属的请求 URL，事件未带 url 时用它兜底" },
         "events": {
           "type": "array",
           "items": { "$ref": "#/definitions/model.TraceEvent" }
@@ -226,7 +227,8 @@ const swaggerDoc = `{
         "event": { "type": "string" },
         "message": { "type": "string" },
         "params": { "type": "object" },
-        "error_message": { "type": "string" }
+        "error_message": { "type": "string" },
+        "url": { "type": "string", "description": "所属请求 URL" }
       }
     },
     "model.TraceReportResponse": {
