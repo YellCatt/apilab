@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime"
 
 	"github.com/YellCatt/apilab/config"
 	"github.com/YellCatt/apilab/controller"
@@ -15,6 +16,11 @@ import (
 
 	"go.uber.org/zap"
 )
+
+// version 服务版本号。默认 dev，构建时可用 ldflags 覆盖：
+//
+//	go build -ldflags "-X main.version=v1.2.3" .
+var version = "dev"
 
 // main 程序入口：加载配置、初始化日志与数据库、组装依赖、启动 HTTP 服务。
 func main() {
@@ -35,6 +41,12 @@ func main() {
 		log.Fatalf("初始化日志组件失败: %v", err)
 	}
 	defer logger.Close()
+
+	// 版本号用 Info 输出：无论日志级别如何配置，启动后都能一眼看到跑的是哪版。
+	logger.Info("服务启动",
+		zap.String("version", version),
+		zap.String("go_version", runtime.Version()),
+	)
 
 	// 启动参数落一份调试日志，排查环境问题时不必再翻配置文件。
 	logger.Debug("配置加载完成",
