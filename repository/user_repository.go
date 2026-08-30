@@ -2,7 +2,7 @@
 package repository
 
 import (
-	"github.com/example/gapi/model"
+	"github.com/YellCatt/apilab/model"
 	"gorm.io/gorm"
 )
 

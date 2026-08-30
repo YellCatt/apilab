@@ -4,7 +4,7 @@ package router
 import (
 	"net/http"
 
-	"github.com/example/gapi/controller"
+	"github.com/YellCatt/apilab/controller"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
@@ -44,8 +44,8 @@ func NewRouter(userController *controller.UserController, statusController *cont
 const swaggerDoc = `{
   "swagger": "2.0",
   "info": {
-    "description": "GAPI - Go API Service",
-    "title": "GAPI",
+    "description": "apilab - Go API Service",
+    "title": "apilab",
     "contact": {},
     "version": "1.0"
   },

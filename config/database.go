@@ -3,7 +3,7 @@ package config
 import (
 	"log"
 
-	"github.com/example/gapi/model"
+	"github.com/YellCatt/apilab/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

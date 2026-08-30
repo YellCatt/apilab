@@ -2,8 +2,8 @@
 package service
 
 import (
-	"github.com/example/gapi/model"
-	"github.com/example/gapi/repository"
+	"github.com/YellCatt/apilab/model"
+	"github.com/YellCatt/apilab/repository"
 )
 
 // UserService 用户业务逻辑接口。

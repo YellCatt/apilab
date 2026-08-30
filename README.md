@@ -1,4 +1,4 @@
-# GAPI
+# apilab
 
 一个基于 Go + GORM + SQLite 构建的 RESTful API 服务模板。
 
@@ -28,16 +28,16 @@ go mod tidy
 
 ```bash
 # 开发环境构建
-go build -o gapi
+go build -o apilab
 
 # 生产环境构建（禁用 CGO）
-CGO_ENABLED=0 go build -o gapi
+CGO_ENABLED=0 go build -o apilab
 ```
 
 ### 运行
 
 ```bash
-./gapi
+./apilab
 ```
 
 首次运行时，系统会自动创建 `config/config.yaml` 配置文件。
@@ -184,7 +184,7 @@ collector:
 ## 项目结构
 
 ```
-gapi/
+apilab/
 ├── config/          # 配置管理
 │   ├── config.go    # 配置加载
 │   ├── config.yaml  # 配置文件
@@ -225,13 +225,13 @@ gapi/
 
 ```bash
 # Linux
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o gapi-linux
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o apilab-linux
 
 # Windows
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o gapi.exe
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o apilab.exe
 
 # macOS
-CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o gapi-macos
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o apilab-macos
 ```
 
 ## 许可证

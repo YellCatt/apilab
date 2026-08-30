@@ -1,4 +1,4 @@
-module github.com/example/gapi
+module github.com/YellCatt/apilab
 
 go 1.22
 

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/example/gapi/model"
-	"github.com/example/gapi/service"
+	"github.com/YellCatt/apilab/model"
+	"github.com/YellCatt/apilab/service"
 )
 
 // TraceController Trace 事件上报相关的 HTTP 请求处理器。

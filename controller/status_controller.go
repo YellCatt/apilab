@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/example/gapi/service"
+	"github.com/YellCatt/apilab/service"
 )
 
 // StatusController 系统状态相关的 HTTP 请求处理器。

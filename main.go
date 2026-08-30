@@ -1,4 +1,4 @@
-// Package main 是 GAPI 服务的入口，负责组装各层组件并启动 HTTP 服务器。
+// Package main 是 apilab 服务的入口，负责组装各层组件并启动 HTTP 服务器。
 package main
 
 import (
@@ -6,12 +6,12 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/example/gapi/config"
-	"github.com/example/gapi/controller"
-	"github.com/example/gapi/logger"
-	"github.com/example/gapi/repository"
-	"github.com/example/gapi/router"
-	"github.com/example/gapi/service"
+	"github.com/YellCatt/apilab/config"
+	"github.com/YellCatt/apilab/controller"
+	"github.com/YellCatt/apilab/logger"
+	"github.com/YellCatt/apilab/repository"
+	"github.com/YellCatt/apilab/router"
+	"github.com/YellCatt/apilab/service"
 
 	"go.uber.org/zap"
 )

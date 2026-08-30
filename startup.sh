@@ -1,21 +1,21 @@
 #!/bin/sh
 
 # ================================================================
-# GAPI 服务守护脚本
-#   - 自动下载 / 热更新 gapi 二进制
+# apilab 服务守护脚本
+#   - 自动下载 / 热更新 apilab 二进制
 #   - 进程崩溃后指数退避重启
 #   - 端口冲突自动清理 + 健康检查自动拉起
 # ================================================================
 
 # ============ 配置区 ============
 PLUGIN_DIR="/plugins/data/apilab"
-BINARY_NAME="gapi"
-TMP_NAME="gapi.tmp"
-TMP_ARCHIVE="gapi.tmp.tar.gz"
+BINARY_NAME="apilab"
+TMP_NAME="apilab.tmp"
+TMP_ARCHIVE="apilab.tmp.tar.gz"
 EXTRACT_DIR="$PLUGIN_DIR/.extract"
-LOG_FILE="$PLUGIN_DIR/logs/gapi.log"
-PID_FILE="$PLUGIN_DIR/gapi.pid"
-DOWNLOAD_URL="https://github.com/YellCatt/apilab/releases/download/dev-latest/gapi_linux_mipsle.tar.gz"
+LOG_FILE="$PLUGIN_DIR/logs/apilab.log"
+PID_FILE="$PLUGIN_DIR/apilab.pid"
+DOWNLOAD_URL="https://github.com/YellCatt/apilab/releases/download/dev-latest/apilab_linux_mipsle.tar.gz"
 
 # 服务运行相关
 CONFIG_DIR="$PLUGIN_DIR/config"
@@ -84,13 +84,13 @@ cleanup() {
 trap 'cleanup' INT TERM
 
 # ============ 启动前强制清理残留进程 ============
-killall -9 gapi 2>/dev/null
+killall -9 apilab 2>/dev/null
 rm -f "$PID_FILE"
-log_info "已清理可能残留的 gapi 进程和 PID 文件"
+log_info "已清理可能残留的 apilab 进程和 PID 文件"
 
 # ============ 防重复启动 ============
 log "========================================"
-log_info "gapi 守护脚本启动"
+log_info "apilab 守护脚本启动"
 log_info "当前工作目录: $(pwd)"
 log_info "插件目录: $PLUGIN_DIR"
 log_info "下载地址: $DOWNLOAD_URL"
@@ -144,7 +144,7 @@ else
     log_ok "目录已存在: $PLUGIN_DIR"
 fi
 
-# 日志目录（守护日志 + gapi 自身 info/warn/error 日志）
+# 日志目录（守护日志 + apilab 自身 info/warn/error 日志）
 if [ ! -d "$PLUGIN_DIR/logs" ]; then
     mkdir -p "$PLUGIN_DIR/logs" && log_ok "日志目录已创建: $PLUGIN_DIR/logs"
 fi
@@ -156,7 +156,7 @@ cd "$PLUGIN_DIR" || {
 }
 
 # ============ 配置文件初始化 ============
-# gapi 启动时从当前目录读取 config/config.yaml，缺失时程序会自建默认配置。
+# apilab 启动时从当前目录读取 config/config.yaml，缺失时程序会自建默认配置。
 # 这里提前写入默认配置，保证端口、数据库路径、日志路径符合插件目录布局；
 # 已存在配置时一律保留，热更新不会覆盖用户配置。
 ensure_config() {
@@ -207,7 +207,7 @@ EOF
 }
 
 # ============ 端口占用清理 ============
-# gapi 是 HTTP 服务，若端口被残留进程占用会直接启动失败，启动前先尝试释放。
+# apilab 是 HTTP 服务，若端口被残留进程占用会直接启动失败，启动前先尝试释放。
 kill_port_process() {
     local port=$1
     local pids=""

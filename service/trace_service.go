@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/example/gapi/logger"
-	"github.com/example/gapi/model"
+	"github.com/YellCatt/apilab/logger"
+	"github.com/YellCatt/apilab/model"
 	"go.uber.org/zap"
 )
 
