@@ -56,13 +56,15 @@ func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 		query := r.URL.RawQuery
 
 		// 注入 trace 上下文，供后续 controller/service/repository 创建子 span。
+		// 以指针形式存放，各层可直接 push/pop span 栈，无需逐层返回新 context。
 		tc := &TraceContext{
-			TraceID:    id,
-			SpanID:     spanID,
-			Reporter:   reporter,
-			StartTime:  start,
-			RemoteAddr: r.RemoteAddr,
-			UserAgent:  r.UserAgent(),
+			TraceID:   id,
+			Reporter:  reporter,
+			StartTime: start,
+		}
+		// 根 span 入栈，使 controller 的 parent 自动指向它。
+		if reporter != nil && !shouldSkipTrace(path) {
+			tc.pushRoot(spanID)
 		}
 		r = r.WithContext(WithTraceContext(r.Context(), tc))
 
@@ -105,8 +107,9 @@ func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 			logger.Info("请求处理完成", fields...)
 		}
 
-		// 请求结束时上报 end 事件，让采集端闭合 span 并计算耗时。
+		// 请求结束（即将返回给用户）时上报 end 事件，并弹出根 span。
 		if reporter != nil && !shouldSkipTrace(path) {
+			tc.pop()
 			endEvent := buildTraceEvent(r, id, spanID, "", rec.status, rec.bytes, time.Now(), "end")
 			go reporter.Report([]model.TraceEvent{endEvent})
 		}

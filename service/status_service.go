@@ -199,8 +199,7 @@ func logSampleError(metric string, err error) {
 
 // GetStatus 获取当前系统状态快照，线程安全。
 func (s *statusService) GetStatus(ctx context.Context) (*model.SystemStatus, error) {
-	_, end := middleware.StartSpan(ctx, "service", "status.get", "获取系统状态", nil)
-	defer end()
+	defer middleware.Span(ctx)()
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()

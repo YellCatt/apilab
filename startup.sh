@@ -55,7 +55,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-log_info()  { log "【信息】$1"; }
+log_info()  { log "【信息1】$1"; }
 log_ok()    { log "【成功】✓ $1"; }
 log_warn()  { log "【警告】⚠ $1"; }
 log_error() { log "【错误】✗ $1"; }

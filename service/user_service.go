@@ -32,8 +32,7 @@ func NewUserService(repo repository.UserRepository) UserService {
 
 // CreateUser 创建新用户。
 func (s *userService) CreateUser(ctx context.Context, req *model.CreateUserRequest) (*model.User, error) {
-	ctx, end := middleware.StartSpan(ctx, "service", "user.create", "创建用户", nil)
-	defer end(map[string]interface{}{"name": req.Name, "age": req.Age})
+	defer middleware.Span(ctx)()
 
 	logger.Debug("服务层：创建用户", zap.String("name", req.Name), zap.Int("age", req.Age))
 
@@ -52,8 +51,7 @@ func (s *userService) CreateUser(ctx context.Context, req *model.CreateUserReque
 
 // GetUserByID 根据 ID 查询用户。
 func (s *userService) GetUserByID(ctx context.Context, id uint) (*model.User, error) {
-	ctx, end := middleware.StartSpan(ctx, "service", "user.get_by_id", "根据 ID 查询用户", map[string]interface{}{"id": id})
-	defer end()
+	defer middleware.Span(ctx)()
 
 	logger.Debug("服务层：查询用户", zap.Uint("id", id))
 
@@ -71,8 +69,7 @@ func (s *userService) GetUserByID(ctx context.Context, id uint) (*model.User, er
 
 // GetAllUsers 查询所有用户。
 func (s *userService) GetAllUsers(ctx context.Context) ([]model.User, error) {
-	ctx, end := middleware.StartSpan(ctx, "service", "user.get_all", "查询全部用户", nil)
-	defer end()
+	defer middleware.Span(ctx)()
 
 	logger.Debug("服务层：查询用户列表")
 
@@ -87,8 +84,7 @@ func (s *userService) GetAllUsers(ctx context.Context) ([]model.User, error) {
 
 // UpdateUser 更新指定用户，仅更新请求中非空的字段。
 func (s *userService) UpdateUser(ctx context.Context, id uint, req *model.UpdateUserRequest) (*model.User, error) {
-	ctx, end := middleware.StartSpan(ctx, "service", "user.update", "更新用户", map[string]interface{}{"id": id})
-	defer end(map[string]interface{}{"name": req.Name, "age": req.Age})
+	defer middleware.Span(ctx)()
 
 	logger.Debug("服务层：更新用户",
 		zap.Uint("id", id), zap.String("name", req.Name), zap.Int("age", req.Age))
@@ -129,8 +125,7 @@ func (s *userService) UpdateUser(ctx context.Context, id uint, req *model.Update
 
 // DeleteUser 根据 ID 删除用户。
 func (s *userService) DeleteUser(ctx context.Context, id uint) error {
-	ctx, end := middleware.StartSpan(ctx, "service", "user.delete", "删除用户", map[string]interface{}{"id": id})
-	defer end()
+	defer middleware.Span(ctx)()
 
 	logger.Debug("服务层：删除用户", zap.Uint("id", id))
 

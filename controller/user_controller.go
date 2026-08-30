@@ -25,8 +25,8 @@ func NewUserController(service service.UserService) *UserController {
 
 // CreateUser 处理 POST /api/users 请求，创建新用户。
 func (c *UserController) CreateUser(w http.ResponseWriter, r *http.Request) {
-	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.create", "处理创建用户请求", nil)
-	defer end()
+	ctx := r.Context()
+	defer middleware.Span(ctx)()
 
 	fields := middleware.Fields(r)
 	logger.Debug("收到创建用户请求", fields...)
@@ -59,8 +59,8 @@ func (c *UserController) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 // GetUserByID 处理 GET /api/users/{id} 请求，根据 ID 查询用户。
 func (c *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
-	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.get_by_id", "处理查询用户请求", nil)
-	defer end()
+	ctx := r.Context()
+	defer middleware.Span(ctx)()
 
 	idStr := r.PathValue("id")
 	fields := append(middleware.Fields(r), zap.String("id_param", idStr))
@@ -96,8 +96,8 @@ func (c *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
 
 // GetAllUsers 处理 GET /api/users 请求，查询所有用户。
 func (c *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
-	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.get_all", "处理查询用户列表请求", nil)
-	defer end()
+	ctx := r.Context()
+	defer middleware.Span(ctx)()
 
 	fields := middleware.Fields(r)
 	logger.Debug("收到查询用户列表请求", fields...)
@@ -120,8 +120,8 @@ func (c *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUser 处理 PUT /api/users/{id} 请求，更新指定用户。
 func (c *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.update", "处理更新用户请求", nil)
-	defer end()
+	ctx := r.Context()
+	defer middleware.Span(ctx)()
 
 	idStr := r.PathValue("id")
 	fields := append(middleware.Fields(r), zap.String("id_param", idStr))
@@ -167,8 +167,8 @@ func (c *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUser 处理 DELETE /api/users/{id} 请求，删除指定用户。
 func (c *UserController) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	ctx, end := middleware.StartSpan(r.Context(), "controller", "user.delete", "处理删除用户请求", nil)
-	defer end()
+	ctx := r.Context()
+	defer middleware.Span(ctx)()
 
 	idStr := r.PathValue("id")
 	fields := append(middleware.Fields(r), zap.String("id_param", idStr))
