@@ -160,7 +160,8 @@ func logEvents(events []model.TraceEvent) {
 	}
 	var errs, warns int
 	traces := make(map[string]struct{}, 8)
-	modules := make(map[string]int, 4)
+	// module 字段写的是接口 URL，这里统计的其实是各接口的事件分布。
+	routes := make(map[string]int, 4)
 	for _, e := range events {
 		switch e.Level {
 		case eventLevelError:
@@ -169,12 +170,12 @@ func logEvents(events []model.TraceEvent) {
 			warns++
 		}
 		traces[e.TraceID] = struct{}{}
-		modules[e.Module]++
+		routes[e.Module]++
 	}
 	logger.Debug("收到 Trace 事件",
 		zap.Int("count", len(events)),
 		zap.Int("traces", len(traces)),
-		zap.Any("modules", modules),
+		zap.Any("routes", routes),
 		zap.Int("warn", warns),
 		zap.Int("error", errs),
 		// 抽样一条，便于确认字段格式；完整内容以采集端为准。

@@ -37,6 +37,11 @@ const instrumentationName = "github.com/YellCatt/apilab"
 // slowSpanThreshold 耗时超过该值的 span 按 warn 处理，与访问日志的慢请求判定保持一致。
 const slowSpanThreshold = 500 * time.Millisecond
 
+// routeTTL 接口路由在缓存里的存活时间。
+// HTTP 根 span 最后才结束，而子 span（SQL、函数）可能已在更早的批次里导出，
+// 缓存住路由，晚到的同链路 span 才能补上接口 URL。
+const routeTTL = 5 * time.Minute
+
 // 自定义 span 属性：补上 OTel 语义约定里没有、但采集端一直在用的字段。
 var (
 	// AttrRequestID 把应用层的 X-Request-ID 挂到 span 上，便于与访问日志互查。
@@ -176,6 +181,17 @@ func shutdown() {
 // 它实现了 sdktrace.SpanExporter 接口。
 type eventExporter struct {
 	reporter Reporter
+
+	// routes 缓存 traceID -> 接口 URL。ExportSpans 可能并发调用，需要加锁。
+	mu        sync.Mutex
+	routes    map[string]routeEntry
+	lastSweep time.Time // 上次清理过期路由的时间
+}
+
+// routeEntry 缓存的一条接口路由及其写入时间。
+type routeEntry struct {
+	route string
+	at    time.Time
 }
 
 // ExportSpans 把一批 span 转成事件上报。
@@ -185,14 +201,73 @@ func (e *eventExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOn
 		return nil
 	}
 
+	// 路由只写在 HTTP 根 span 上，先登记再生成事件，
+	// SQL 与函数 span 才能一起标上同一次请求的接口 URL。
+	routes := e.collectRoutes(spans)
+
 	events := make([]model.TraceEvent, 0, len(spans)*2)
 	for _, s := range spans {
-		events = append(events, newEvent(s, "start"), newEvent(s, "end"))
+		events = append(events, newEvent(s, "start", routes), newEvent(s, "end", routes))
 	}
 
 	logger.Debug("导出 span 批次", zap.Int("spans", len(spans)), zap.Int("events", len(events)))
 	e.reporter.Report(events)
 	return nil
+}
+
+// collectRoutes 把本批 span 携带的路由登记进缓存，并返回本批涉及的 trace 的路由快照。
+func (e *eventExporter) collectRoutes(spans []sdktrace.ReadOnlySpan) map[string]string {
+	now := time.Now()
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.routes == nil {
+		e.routes = make(map[string]routeEntry, len(spans))
+	}
+	for _, s := range spans {
+		for _, kv := range s.Attributes() {
+			if kv.Key != keyHTTPRoute {
+				continue
+			}
+			tid := s.SpanContext().TraceID().String()
+			if _, ok := e.routes[tid]; !ok {
+				e.routes[tid] = routeEntry{route: routePath(kv.Value.AsString()), at: now}
+			}
+			break
+		}
+	}
+	// 顺带清掉过期条目，避免 trace 量大时缓存无限增长。
+	if now.Sub(e.lastSweep) > routeTTL {
+		for tid, entry := range e.routes {
+			if now.Sub(entry.at) > routeTTL {
+				delete(e.routes, tid)
+			}
+		}
+		e.lastSweep = now
+	}
+
+	// 只拷贝本批涉及的 trace，免得每次导出都复制整张表。
+	snapshot := make(map[string]string, len(spans))
+	for _, s := range spans {
+		tid := s.SpanContext().TraceID().String()
+		if _, ok := snapshot[tid]; ok {
+			continue
+		}
+		snapshot[tid] = e.routes[tid].route
+	}
+	return snapshot
+}
+
+// routePath 把路由模板规整成接口 URL：
+// "GET /api/users/{id}" -> "/api/users/{id}"，"/api/users" -> "/api/users"。
+// 去掉方法前缀是为了让同一接口的读写归入同一项；
+// 保留 {id} 这类占位符，否则每个 id 都会变成一种取值，采集端会被撑爆。
+func routePath(route string) string {
+	if i := strings.Index(route, " "); i >= 0 {
+		return route[i+1:]
+	}
+	return route
 }
 
 // Shutdown 导出器本身的关闭逻辑，资源已由 provider 统一释放。
@@ -201,7 +276,8 @@ func (e *eventExporter) Shutdown(context.Context) error {
 }
 
 // newEvent 把一个 span 转成一条 start 或 end 事件。
-func newEvent(s sdktrace.ReadOnlySpan, event string) model.TraceEvent {
+// routes 是本批 span 所属 trace 的接口 URL，用于把事件统一归到接口上。
+func newEvent(s sdktrace.ReadOnlySpan, event string, routes map[string]string) model.TraceEvent {
 	cost := s.EndTime().Sub(s.StartTime())
 	ts := s.StartTime()
 	if event == "end" {
@@ -210,18 +286,23 @@ func newEvent(s sdktrace.ReadOnlySpan, event string) model.TraceEvent {
 	// 属性集合只构造一次，后面几个判定函数都复用它。
 	set := attribute.NewSet(s.Attributes()...)
 
+	module := rawModule(s, set)
 	te := model.TraceEvent{
 		TraceID:   s.SpanContext().TraceID().String(),
 		SpanID:    s.SpanContext().SpanID().String(),
 		Timestamp: ts,
 		Level:     spanLevel(s, set, cost),
-		Module:    spanModule(s, set),
+		Module:    spanModule(s, module, routes),
 		Event:     event,
 		Message:   spanMessage(s, set),
 		Params:    map[string]interface{}{},
 	}
 	for _, kv := range s.Attributes() {
 		te.Params[string(kv.Key)] = attributeValue(kv.Value)
+	}
+	// 模块名被接口 URL 顶掉后仍留在 params 里，db/service 这类归属信息不丢。
+	if module != te.Module {
+		te.Params["module"] = module
 	}
 
 	// 根 span 的父 ID 是无效值（全 0），转成空串避免采集端显示成一串 0。
@@ -294,8 +375,8 @@ func attrString(set attribute.Set, k attribute.Key) string {
 	return v.AsString()
 }
 
-// spanModule 判断 span 所属模块：数据库、HTTP，或按函数名推导。
-func spanModule(s sdktrace.ReadOnlySpan, set attribute.Set) string {
+// rawModule 判断 span 自身的模块归属：数据库、HTTP，或按函数名推导。
+func rawModule(s sdktrace.ReadOnlySpan, set attribute.Set) string {
 	if attrString(set, keyDBStatement) != "" || attrString(set, keyDBSystem) != "" {
 		return "db"
 	}
@@ -303,6 +384,15 @@ func spanModule(s sdktrace.ReadOnlySpan, set attribute.Set) string {
 		return "http"
 	}
 	return moduleFromName(s.Name())
+}
+
+// spanModule 决定事件归到哪一项：优先用所属请求的接口 URL（如 /api/users），
+// 采集端即可按接口聚合；取不到路由（非 HTTP 链路）时才退回模块名。
+func spanModule(s sdktrace.ReadOnlySpan, module string, routes map[string]string) string {
+	if route := routes[s.SpanContext().TraceID().String()]; route != "" {
+		return route
+	}
+	return module
 }
 
 // spanLevel 按 span 状态、HTTP 状态码与耗时给出事件级别。
