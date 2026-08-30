@@ -20,7 +20,7 @@ import (
 // version 服务版本号。默认 dev，构建时可用 ldflags 覆盖：
 //
 //	go build -ldflags "-X main.version=v1.2.3" .
-var version = "v1.0.0-20260830-1600"
+var version = "v1.0.0-20260830-1630"
 
 // main 程序入口：加载配置、初始化日志与数据库、组装依赖、启动 HTTP 服务。
 func main() {
