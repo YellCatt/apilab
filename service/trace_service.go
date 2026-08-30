@@ -57,6 +57,8 @@ type traceService struct {
 	client       *http.Client  // HTTP 客户端
 	stopCh       chan struct{} // 停止信号
 	doneCh       chan struct{} // 后台协程退出确认
+
+	received uint64 // 累计写入缓冲的事件数（受 mu 保护）
 }
 
 // NewTraceService 创建一个新的 Trace 上报服务，并启动后台定时刷新协程。
@@ -104,7 +106,9 @@ func (s *traceService) Report(events []model.TraceEvent) {
 
 	s.mu.Lock()
 	s.buffer = append(s.buffer, events...)
+	s.received += uint64(len(events))
 	buffered := len(s.buffer)
+	totalReceived := s.received
 	// 攒够 batchSize 立即取出发送，不足部分由定时协程兜底
 	var batches [][]model.TraceEvent
 	for len(s.buffer) >= s.batchSize {
@@ -114,8 +118,11 @@ func (s *traceService) Report(events []model.TraceEvent) {
 	remaining := len(s.buffer)
 	s.mu.Unlock()
 
-	logger.Debug("Trace 事件已写入缓冲",
+	// 用 Info 级别：入缓冲是整条上报链路的起点，必须无条件可见，
+	// 否则缓冲长期为空时无从判断是"没事件产生"还是"事件被吞了"。
+	logger.Info("Trace 事件已写入缓冲",
 		zap.Int("received", len(events)),
+		zap.Uint64("total_received", totalReceived),
 		zap.Int("buffered", buffered),
 		zap.Int("remaining", remaining),
 		zap.Int("batches", len(batches)),
@@ -152,10 +159,13 @@ func (s *traceService) flushBuffer() {
 	s.mu.Lock()
 	batch := s.buffer
 	s.buffer = nil
+	totalReceived := s.received
 	s.mu.Unlock()
 
 	if len(batch) == 0 {
-		logger.Debug("缓冲为空，跳过刷新")
+		// 带上累计入缓冲条数：看到 total_received 一直是 0 就能确认
+		// 根本没有事件产生（而非缓冲被提前清空），直接去查上报侧。
+		logger.Debug("缓冲为空，跳过刷新", zap.Uint64("total_received", totalReceived))
 		return
 	}
 	logger.Debug("定时器触发批量刷新", zap.Int("count", len(batch)), zap.String("url", s.collectorURL))
