@@ -68,7 +68,9 @@ func main() {
 		zap.String("collector_url", config.GetCollectorURL()),
 	)
 
-	r := router.NewRouter(userController, statusController, traceController)
+	// 把 traceService 交给路由：每个业务请求结束后会自动生成一条 trace 事件，
+	// 由它缓冲并批量转发到采集端。
+	r := router.NewRouter(userController, statusController, traceController, traceService)
 
 	port := config.GetServerPort()
 	addr := fmt.Sprintf(":%d", port)

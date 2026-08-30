@@ -8,11 +8,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/YellCatt/apilab/logger"
+	"github.com/YellCatt/apilab/model"
 	"go.uber.org/zap"
 )
 
@@ -22,11 +25,24 @@ const RequestIDHeader = "X-Request-ID"
 // slowRequestThreshold 请求耗时超过该值时按慢请求处理，用 Warn 级别输出。
 const slowRequestThreshold = 500 * time.Millisecond
 
+// skipTracePaths 这些路径不生成 trace 事件：
+//   - /health 是探活接口，外部通常每 10s 一次，上报会把采集端刷爆；
+//   - /swagger/ 是静态文档；
+//   - /api/traces/report 是上报入口，它自身产生的事件会再次进入缓冲形成自反馈。
+var skipTracePaths = []string{"/health", "/swagger/", "/api/traces/report"}
+
 // requestIDKey 是请求 ID 在 context 中的私有键类型，避免与其它包的键冲突。
 type requestIDKey struct{}
 
+// Reporter 上报 trace 事件的抽象。由 service.TraceService 实现，
+// 接口定义在 middleware 包可避免中间件直接依赖 service 包。
+type Reporter interface {
+	Report(events []model.TraceEvent)
+}
+
 // RequestLog 为请求注入 ID，并在进入/离开处理器时打印调试与访问日志。
-func RequestLog(next http.HandlerFunc) http.HandlerFunc {
+// reporter 非 nil 时，请求结束还会生成一条 trace 事件交给它缓冲、批量转发采集端。
+func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := requestIDFromHeader(r)
 		w.Header().Set(RequestIDHeader, id)
@@ -66,7 +82,83 @@ func RequestLog(next http.HandlerFunc) http.HandlerFunc {
 		default:
 			logger.Info("请求处理完成", fields...)
 		}
+
+		if reporter != nil && !shouldSkipTrace(r.URL.Path) {
+			event := buildTraceEvent(r, id, rec.status, cost, rec.bytes)
+			// 异步上报：flush 走到网络 IO，不能让它拖慢请求响应。
+			go reporter.Report([]model.TraceEvent{event})
+		}
 	}
+}
+
+// shouldSkipTrace 判断该路径是否需要生成 trace 事件。
+func shouldSkipTrace(path string) bool {
+	for _, prefix := range skipTracePaths {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildTraceEvent 把一次请求的处理结果封装成 trace 事件。
+// trace_id 沿用请求 ID，这样采集端与本地日志能按同一 ID 对上。
+func buildTraceEvent(r *http.Request, requestID string, status int, cost time.Duration, bytes int) model.TraceEvent {
+	query := r.URL.RawQuery
+	message := r.Method + " " + r.URL.Path + " " + strconv.Itoa(status)
+	if query != "" {
+		message += "?" + query
+	}
+
+	event := model.TraceEvent{
+		TraceID:   requestID,
+		SpanID:    newSpanID(),
+		Timestamp: time.Now(),
+		Level:     traceLevel(status, cost),
+		Module:    moduleFromPath(r.URL.Path),
+		Event:     "http.request",
+		Message:   message,
+		Params: map[string]interface{}{
+			"request_id":     requestID,
+			"method":         r.Method,
+			"path":           r.URL.Path,
+			"query":          query,
+			"status":         status,
+			"cost_ms":        math.Round(float64(cost.Microseconds())/100) / 10,
+			"response_bytes": bytes,
+			"remote_addr":    r.RemoteAddr,
+			"user_agent":     r.UserAgent(),
+		},
+	}
+	if status >= http.StatusInternalServerError {
+		event.ErrorMessage = http.StatusText(status)
+	}
+	return event
+}
+
+// traceLevel 按响应状态码与耗时给出事件级别，与访问日志的级别判定保持一致。
+func traceLevel(status int, cost time.Duration) string {
+	switch {
+	case status >= http.StatusInternalServerError:
+		return "error"
+	case status >= http.StatusBadRequest, cost >= slowRequestThreshold:
+		return "warn"
+	default:
+		return "info"
+	}
+}
+
+// moduleFromPath 从路径推导模块名：/api/users/{id} -> users，/status -> status。
+func moduleFromPath(path string) string {
+	module := strings.TrimPrefix(path, "/api/")
+	module = strings.TrimPrefix(module, "/")
+	if i := strings.Index(module, "/"); i >= 0 {
+		module = module[:i]
+	}
+	if module == "" {
+		return "http"
+	}
+	return module
 }
 
 // RequestIDFrom 取出本请求的 ID；请求未经 RequestLog 中间件时返回 "-"。
@@ -110,6 +202,16 @@ func requestIDFromHeader(r *http.Request) string {
 // 随机数不可用时退化为时间戳，保证日志里始终有个可串联的值。
 func newRequestID() string {
 	buf := make([]byte, 12)
+	if _, err := rand.Read(buf); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return hex.EncodeToString(buf)
+}
+
+// newSpanID 生成 8 字节随机数（16 个十六进制字符）作为 Span ID。
+// span 只需要在一次请求内唯一，长度取 request ID 的一半即可。
+func newSpanID() string {
+	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
 		return strconv.FormatInt(time.Now().UnixNano(), 36)
 	}

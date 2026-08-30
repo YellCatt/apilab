@@ -12,32 +12,36 @@ import (
 )
 
 // NewRouter 创建并配置 HTTP 请求路由器，注册所有 API 路由及 Swagger 文档。
-// 每个路由都套上 middleware.RequestLog，统一输出请求级调试日志并注入请求 ID。
-func NewRouter(userController *controller.UserController, statusController *controller.StatusController, traceController *controller.TraceController) *http.ServeMux {
+// 每个路由都套上 middleware.RequestLog，统一输出请求级调试日志、注入请求 ID，
+// 并在请求结束后把处理结果转成 trace 事件交给 reporter 批量转发采集端（reporter 可为 nil）。
+func NewRouter(userController *controller.UserController, statusController *controller.StatusController, traceController *controller.TraceController, reporter middleware.Reporter) *http.ServeMux {
 	mux := http.NewServeMux()
+	withLog := func(next http.HandlerFunc) http.HandlerFunc {
+		return middleware.RequestLog(next, reporter)
+	}
 
-	mux.HandleFunc("GET /health", middleware.RequestLog(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /health", withLog(func(w http.ResponseWriter, r *http.Request) {
 		logger.Debug("健康检查", middleware.Fields(r)...)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","message":"Service is running"}`))
 	}))
 
-	mux.HandleFunc("GET /status", middleware.RequestLog(statusController.GetStatus))
+	mux.HandleFunc("GET /status", withLog(statusController.GetStatus))
 
-	mux.HandleFunc("POST /api/users", middleware.RequestLog(userController.CreateUser))
-	mux.HandleFunc("GET /api/users", middleware.RequestLog(userController.GetAllUsers))
-	mux.HandleFunc("GET /api/users/{id}", middleware.RequestLog(userController.GetUserByID))
-	mux.HandleFunc("PUT /api/users/{id}", middleware.RequestLog(userController.UpdateUser))
-	mux.HandleFunc("DELETE /api/users/{id}", middleware.RequestLog(userController.DeleteUser))
+	mux.HandleFunc("POST /api/users", withLog(userController.CreateUser))
+	mux.HandleFunc("GET /api/users", withLog(userController.GetAllUsers))
+	mux.HandleFunc("GET /api/users/{id}", withLog(userController.GetUserByID))
+	mux.HandleFunc("PUT /api/users/{id}", withLog(userController.UpdateUser))
+	mux.HandleFunc("DELETE /api/users/{id}", withLog(userController.DeleteUser))
 
-	mux.HandleFunc("POST /api/traces/report", middleware.RequestLog(traceController.Report))
+	mux.HandleFunc("POST /api/traces/report", withLog(traceController.Report))
 
-	mux.Handle("/swagger/", middleware.RequestLog(httpSwagger.Handler(
+	mux.Handle("/swagger/", withLog(httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
 	).ServeHTTP))
 
-	mux.HandleFunc("GET /swagger/doc.json", middleware.RequestLog(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /swagger/doc.json", withLog(func(w http.ResponseWriter, r *http.Request) {
 		logger.Debug("提供 Swagger 文档", append(middleware.Fields(r), zap.Int("bytes", len(swaggerDoc)))...)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(swaggerDoc))

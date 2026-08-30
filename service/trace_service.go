@@ -85,9 +85,10 @@ func (s *traceService) Report(events []model.TraceEvent) {
 		return
 	}
 
-	// 整合到本地日志，保证即便采集端不可用也有本地可查的记录
+	// 整合到本地日志，保证即便采集端不可用也有本地可查的记录。
+	// 用 Debug 级别：现在每个业务请求都会自动产生一条事件，逐条打 Info 会淹没访问日志。
 	for _, e := range events {
-		logger.Info("收到 Trace 事件",
+		logger.Debug("收到 Trace 事件",
 			zap.String("trace_id", e.TraceID),
 			zap.String("span_id", e.SpanID),
 			zap.String("parent_span_id", e.ParentSpanID),
