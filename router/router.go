@@ -13,11 +13,11 @@ import (
 
 // NewRouter 创建并配置 HTTP 请求路由器，注册所有 API 路由及 Swagger 文档。
 // 每个路由都套上 middleware.RequestLog，统一输出请求级调试日志、注入请求 ID，
-// 并在请求结束后把处理结果转成 trace 事件交给 reporter 批量转发采集端（reporter 可为 nil）。
-func NewRouter(userController *controller.UserController, statusController *controller.StatusController, traceController *controller.TraceController, reporter middleware.Reporter) *http.ServeMux {
+// 并创建 HTTP 根 span；SQL 与业务函数的 span 会自动挂到它之下。
+func NewRouter(userController *controller.UserController, statusController *controller.StatusController, traceController *controller.TraceController) *http.ServeMux {
 	mux := http.NewServeMux()
 	withLog := func(next http.HandlerFunc) http.HandlerFunc {
-		return middleware.RequestLog(next, reporter)
+		return middleware.RequestLog(next)
 	}
 
 	mux.HandleFunc("GET /health", withLog(func(w http.ResponseWriter, r *http.Request) {

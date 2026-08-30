@@ -2,20 +2,23 @@
 //
 // 中间件以 http.HandlerFunc 为单位实现，可直接注册到 http.ServeMux。
 // 请求 ID 会写入响应头 X-Request-ID 并放进 context，各层日志带上它即可按一次调用串联。
+//
+// HTTP 根 span 同样在这里创建：数据库层由 otelgorm 自动埋点、业务函数由 Span 埋点，
+// 它们都从 context 里取父 span，因此会自动挂到这个根 span 之下。
 package middleware
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/YellCatt/apilab/logger"
-	"github.com/YellCatt/apilab/model"
+	"github.com/YellCatt/apilab/trace"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -25,7 +28,7 @@ const RequestIDHeader = "X-Request-ID"
 // slowRequestThreshold 请求耗时超过该值时按慢请求处理，用 Warn 级别输出。
 const slowRequestThreshold = 500 * time.Millisecond
 
-// skipTracePaths 这些路径不生成 trace 事件：
+// skipTracePaths 这些路径不生成 trace span：
 //   - /health 是探活接口，外部通常每 10s 一次，上报会把采集端刷爆；
 //   - /swagger/ 是静态文档；
 //   - /api/traces/report 是上报入口，它自身产生的事件会再次进入缓冲形成自反馈。
@@ -34,16 +37,8 @@ var skipTracePaths = []string{"/health", "/swagger/", "/api/traces/report"}
 // requestIDKey 是请求 ID 在 context 中的私有键类型，避免与其它包的键冲突。
 type requestIDKey struct{}
 
-// Reporter 上报 trace 事件的抽象。由 service.TraceService 实现，
-// 接口定义在 middleware 包可避免中间件直接依赖 service 包。
-type Reporter interface {
-	Report(events []model.TraceEvent)
-}
-
-// RequestLog 为请求注入 ID，并在进入/离开处理器时打印调试与访问日志。
-// reporter 非 nil 时，会生成 start/end 两个 trace 事件交给它缓冲、批量转发采集端；
-// 同时把 TraceContext 注入 request context，供 controller/service/repository 创建子 span。
-func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
+// RequestLog 为请求注入 ID、创建 HTTP 根 span，并在进入/离开处理器时打印调试与访问日志。
+func RequestLog(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := requestIDFromHeader(r)
 		w.Header().Set(RequestIDHeader, id)
@@ -51,22 +46,8 @@ func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 		r = r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id))
 
 		start := time.Now()
-		spanID := newSpanID()
 		path := r.URL.Path
 		query := r.URL.RawQuery
-
-		// 注入 trace 上下文，供后续 controller/service/repository 创建子 span。
-		// 以指针形式存放，各层可直接 push/pop span 栈，无需逐层返回新 context。
-		tc := &TraceContext{
-			TraceID:   id,
-			Reporter:  reporter,
-			StartTime: start,
-		}
-		// 根 span 入栈，使 controller 的 parent 自动指向它。
-		if reporter != nil && !shouldSkipTrace(path) {
-			tc.pushRoot(spanID)
-		}
-		r = r.WithContext(WithTraceContext(r.Context(), tc))
 
 		logger.Debug("请求开始处理",
 			zap.String("request_id", id),
@@ -78,10 +59,11 @@ func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 			zap.String("user_agent", r.UserAgent()),
 		)
 
-		// 请求开始时上报 start 事件，让采集端知道 span 的起点。
-		if reporter != nil && !shouldSkipTrace(path) {
-			startEvent := buildTraceEvent(r, id, spanID, "", 0, 0, start, "start")
-			go reporter.Report([]model.TraceEvent{startEvent})
+		// 创建根 span 并把带 span 的 context 写回请求，
+		// 这样下游的 SQL 与函数 span 才能挂到它下面。
+		var span oteltrace.Span
+		if trace.IsEnabled() && !shouldSkipTrace(path) {
+			r = r.WithContext(startHTTPSpan(r, id, &span))
 		}
 
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
@@ -107,16 +89,38 @@ func RequestLog(next http.HandlerFunc, reporter Reporter) http.HandlerFunc {
 			logger.Info("请求处理完成", fields...)
 		}
 
-		// 请求结束（即将返回给用户）时上报 end 事件，并弹出根 span。
-		if reporter != nil && !shouldSkipTrace(path) {
-			tc.pop()
-			endEvent := buildTraceEvent(r, id, spanID, "", rec.status, rec.bytes, time.Now(), "end")
-			go reporter.Report([]model.TraceEvent{endEvent})
+		// end 事件里要带上状态码与响应大小，所以必须在响应写出之后再结束 span。
+		if span != nil {
+			trace.EndHTTPSpan(span, rec.status, rec.bytes)
 		}
 	}
 }
 
-// shouldSkipTrace 判断该路径是否需要生成 trace 事件。
+// startHTTPSpan 创建 HTTP 根 span，返回携带它的 context，并通过 out 回传 span 供结束时调用。
+func startHTTPSpan(r *http.Request, requestID string, out *oteltrace.Span) context.Context {
+	ctx, span := trace.StartHTTPSpan(r.Context(), spanName(r), trace.HTTPRequestInfo{
+		Method:     r.Method,
+		Target:     r.URL.Path,
+		Route:      r.Pattern,
+		Query:      r.URL.RawQuery,
+		RemoteAddr: r.RemoteAddr,
+		UserAgent:  r.UserAgent(),
+		RequestID:  requestID,
+	})
+	*out = span
+	return ctx
+}
+
+// spanName 优先用路由模板（形如 "GET /api/users/{id}"）作为 span 名。
+// 直接用 URL 路径会让每个不同的 id 都产生一种 span 名，属于高基数，会把采集端的聚合统计撑爆。
+func spanName(r *http.Request) string {
+	if r.Pattern != "" {
+		return r.Pattern
+	}
+	return r.Method + " " + r.URL.Path
+}
+
+// shouldSkipTrace 判断该路径是否需要生成 trace span。
 func shouldSkipTrace(path string) bool {
 	for _, prefix := range skipTracePaths {
 		if strings.HasPrefix(path, prefix) {
@@ -124,90 +128,6 @@ func shouldSkipTrace(path string) bool {
 		}
 	}
 	return false
-}
-
-// buildTraceEvent 把一次请求封装成 start 或 end trace 事件。
-// trace_id 沿用请求 ID，span_id 使用传入的根 span；event 为 "start"/"end"，
-// 让采集端识别 span 的起点与终点并计算 duration。
-func buildTraceEvent(r *http.Request, requestID, spanID, parentSpanID string, status, bytes int, ts time.Time, event string) model.TraceEvent {
-	query := r.URL.RawQuery
-	message := r.Method + " " + r.URL.Path
-	if status > 0 {
-		message += " " + strconv.Itoa(status)
-	}
-	if query != "" {
-		message += "?" + query
-	}
-
-	cost := time.Duration(0)
-	if event == "end" {
-		// end 事件计算从请求开始到现在的时间。
-		// 通过 TraceContext 获取开始时间更精确。
-		if tc := TraceContextFrom(r.Context()); tc != nil {
-			cost = time.Since(tc.StartTime)
-		}
-	}
-
-	te := model.TraceEvent{
-		TraceID:      requestID,
-		SpanID:       spanID,
-		ParentSpanID: parentSpanID,
-		Timestamp:    ts,
-		Level:        traceLevel(status, cost),
-		Module:       moduleFromPath(r.URL.Path),
-		Event:        event,
-		Message:      message,
-		Params: map[string]interface{}{
-			"request_id": requestID,
-			"method":     r.Method,
-			"path":       r.URL.Path,
-			"query":      query,
-		},
-	}
-	if status > 0 {
-		te.Params["status"] = status
-	}
-	if bytes > 0 || event == "end" {
-		te.Params["response_bytes"] = bytes
-	}
-	if cost > 0 {
-		te.Params["cost_ms"] = math.Round(float64(cost.Microseconds())/100) / 10
-	}
-	if r.RemoteAddr != "" {
-		te.Params["remote_addr"] = r.RemoteAddr
-	}
-	if r.UserAgent() != "" {
-		te.Params["user_agent"] = r.UserAgent()
-	}
-	if status >= http.StatusInternalServerError {
-		te.ErrorMessage = http.StatusText(status)
-	}
-	return te
-}
-
-// traceLevel 按响应状态码与耗时给出事件级别，与访问日志的级别判定保持一致。
-func traceLevel(status int, cost time.Duration) string {
-	switch {
-	case status >= http.StatusInternalServerError:
-		return "error"
-	case status >= http.StatusBadRequest, cost >= slowRequestThreshold:
-		return "warn"
-	default:
-		return "info"
-	}
-}
-
-// moduleFromPath 从路径推导模块名：/api/users/{id} -> users，/status -> status。
-func moduleFromPath(path string) string {
-	module := strings.TrimPrefix(path, "/api/")
-	module = strings.TrimPrefix(module, "/")
-	if i := strings.Index(module, "/"); i >= 0 {
-		module = module[:i]
-	}
-	if module == "" {
-		return "http"
-	}
-	return module
 }
 
 // RequestIDFrom 取出本请求的 ID；请求未经 RequestLog 中间件时返回 "-"。
@@ -251,16 +171,6 @@ func requestIDFromHeader(r *http.Request) string {
 // 随机数不可用时退化为时间戳，保证日志里始终有个可串联的值。
 func newRequestID() string {
 	buf := make([]byte, 12)
-	if _, err := rand.Read(buf); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), 36)
-	}
-	return hex.EncodeToString(buf)
-}
-
-// newSpanID 生成 8 字节随机数（16 个十六进制字符）作为 Span ID。
-// span 只需要在一次请求内唯一，长度取 request ID 的一半即可。
-func newSpanID() string {
-	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
 		return strconv.FormatInt(time.Now().UnixNano(), 36)
 	}

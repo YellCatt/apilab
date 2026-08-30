@@ -13,6 +13,7 @@ import (
 	"github.com/YellCatt/apilab/repository"
 	"github.com/YellCatt/apilab/router"
 	"github.com/YellCatt/apilab/service"
+	"github.com/YellCatt/apilab/trace"
 
 	"go.uber.org/zap"
 )
@@ -62,6 +63,22 @@ func main() {
 		zap.Duration("collector.flush_interval", config.GetCollectorFlushInterval()),
 	)
 
+	traceService := service.NewTraceService(config.GetCollectorURL(), config.GetCollectorBatchSize(), config.GetCollectorFlushInterval())
+	defer traceService.Stop()
+	traceController := controller.NewTraceController(traceService)
+
+	// 链路追踪必须在建库之前初始化：otelgorm 插件是在 gorm.Open 时注册的，
+	// 顺序反了插件就会绑到 no-op tracer 上，SQL span 一条都收不到。
+	// 关闭顺序也相反：先 shutdown 把剩余 span 导出，再停上报器把它们发出去。
+	shutdownTrace, err := trace.Init(trace.Options{
+		ServiceName: "apilab",
+		Reporter:    traceService,
+	})
+	if err != nil {
+		log.Fatalf("初始化链路追踪失败: %v", err)
+	}
+	defer shutdownTrace()
+
 	db := config.NewDatabase()
 
 	userRepo := repository.NewUserRepository(db)
@@ -71,18 +88,14 @@ func main() {
 	statusService := service.NewStatusService()
 	statusController := controller.NewStatusController(statusService)
 
-	traceService := service.NewTraceService(config.GetCollectorURL(), config.GetCollectorBatchSize(), config.GetCollectorFlushInterval())
-	defer traceService.Stop()
-	traceController := controller.NewTraceController(traceService)
-
 	logger.Debug("依赖注入完成",
 		zap.String("db_path", config.GetDatabasePath()),
 		zap.String("collector_url", config.GetCollectorURL()),
 	)
 
-	// 把 traceService 交给路由：每个业务请求结束后会自动生成一条 trace 事件，
-	// 由它缓冲并批量转发到采集端。
-	r := router.NewRouter(userController, statusController, traceController, traceService)
+	// HTTP 根 span 由 middleware.RequestLog 创建，SQL span 由 otelgorm 自动生成，
+	// 业务函数 span 由 middleware.Span 手动添加，三者按 context 自动串成一棵树。
+	r := router.NewRouter(userController, statusController, traceController)
 
 	port := config.GetServerPort()
 	addr := fmt.Sprintf(":%d", port)

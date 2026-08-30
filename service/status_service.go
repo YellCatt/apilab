@@ -199,7 +199,10 @@ func logSampleError(metric string, err error) {
 
 // GetStatus 获取当前系统状态快照，线程安全。
 func (s *statusService) GetStatus(ctx context.Context) (*model.SystemStatus, error) {
-	defer middleware.Span(ctx)()
+	// 必须接收新 ctx 并往下传：SQL span 靠它确定父 span，
+	// 否则会挂到 HTTP 根 span 上，而不是当前这个业务函数之下。
+	ctx, end := middleware.Span(ctx)
+	defer end()
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()

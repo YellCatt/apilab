@@ -7,6 +7,8 @@ import (
 
 	"github.com/YellCatt/apilab/logger"
 	"github.com/YellCatt/apilab/model"
+	"github.com/YellCatt/apilab/trace"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -32,6 +34,17 @@ func NewDatabase() *gorm.DB {
 	}
 	logger.Debug("数据库已打开",
 		zap.String("path", cfg.Database.Path), zap.Duration("cost", time.Since(start)))
+
+	// 注册 OTel 插件：此后每条 SQL 都会自动产生一个子 span，repository 里不需要任何埋点。
+	// 必须在 trace.Init 之后执行，否则插件会绑到 no-op 的 tracer 上。
+	// WithoutQueryVariables 只记录参数化语句（带 ? 占位），避免把敏感值写进链路数据。
+	if trace.IsEnabled() {
+		if err := db.Use(otelgorm.NewPlugin(otelgorm.WithoutQueryVariables())); err != nil {
+			logger.Error("注册 GORM 链路追踪插件失败", zap.Error(err))
+			log.Fatalf("注册 GORM 链路追踪插件失败: %v", err)
+		}
+		logger.Debug("GORM 链路追踪插件已注册")
+	}
 
 	migrateStart := time.Now()
 	err = db.AutoMigrate(&model.User{})

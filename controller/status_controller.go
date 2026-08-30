@@ -23,7 +23,6 @@ func NewStatusController(service service.StatusService) *StatusController {
 // GetStatus 处理 GET /status 请求，返回系统运行状态。
 func (c *StatusController) GetStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	defer middleware.Span(ctx)()
 
 	fields := middleware.Fields(r)
 	logger.Debug("收到系统状态查询请求", fields...)

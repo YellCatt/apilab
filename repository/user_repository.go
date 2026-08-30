@@ -1,4 +1,8 @@
 // Package repository 定义了数据访问层，封装数据库操作。
+//
+// SQL 的链路埋点由 otelgorm 插件自动完成，本层没有任何埋点代码。
+// 唯一的要求是把 context 交给 GORM（WithContext）：插件据此确定父 span，
+// 少了它 SQL span 会脱离当前调用链，变成一条孤立的根 span。
 package repository
 
 import (
@@ -6,7 +10,6 @@ import (
 	"time"
 
 	"github.com/YellCatt/apilab/logger"
-	"github.com/YellCatt/apilab/middleware"
 	"github.com/YellCatt/apilab/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -33,12 +36,8 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 
 // Create 创建新用户记录。
 func (r *userRepository) Create(ctx context.Context, user *model.User) error {
-	defer middleware.Span(ctx)()
-
 	start := time.Now()
-	tx := r.sqlExec(ctx, "sql: INSERT INTO users", func() *gorm.DB {
-		return r.db.Create(user)
-	})
+	tx := r.db.WithContext(ctx).Create(user)
 
 	logger.Debug("数据库：新增用户",
 		zap.String("name", user.Name),
@@ -52,13 +51,9 @@ func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 
 // GetByID 根据 ID 查询用户，返回 nil,nil 表示未找到记录。
 func (r *userRepository) GetByID(ctx context.Context, id uint) (*model.User, error) {
-	defer middleware.Span(ctx)()
-
 	var user model.User
 	start := time.Now()
-	tx := r.sqlExec(ctx, "sql: SELECT * FROM users WHERE id = ?", func() *gorm.DB {
-		return r.db.First(&user, id)
-	})
+	tx := r.db.WithContext(ctx).First(&user, id)
 
 	logger.Debug("数据库：按 ID 查询用户",
 		zap.Uint("id", id),
@@ -77,13 +72,9 @@ func (r *userRepository) GetByID(ctx context.Context, id uint) (*model.User, err
 
 // GetAll 查询所有用户记录。
 func (r *userRepository) GetAll(ctx context.Context) ([]model.User, error) {
-	defer middleware.Span(ctx)()
-
 	var users []model.User
 	start := time.Now()
-	tx := r.sqlExec(ctx, "sql: SELECT * FROM users", func() *gorm.DB {
-		return r.db.Find(&users)
-	})
+	tx := r.db.WithContext(ctx).Find(&users)
 
 	logger.Debug("数据库：查询全部用户",
 		zap.Duration("cost", time.Since(start)),
@@ -95,12 +86,8 @@ func (r *userRepository) GetAll(ctx context.Context) ([]model.User, error) {
 
 // Update 更新指定用户的所有字段。
 func (r *userRepository) Update(ctx context.Context, user *model.User) error {
-	defer middleware.Span(ctx)()
-
 	start := time.Now()
-	tx := r.sqlExec(ctx, "sql: UPDATE users", func() *gorm.DB {
-		return r.db.Save(user)
-	})
+	tx := r.db.WithContext(ctx).Save(user)
 
 	logger.Debug("数据库：更新用户",
 		zap.Uint("id", user.ID),
@@ -115,12 +102,8 @@ func (r *userRepository) Update(ctx context.Context, user *model.User) error {
 
 // Delete 根据 ID 删除用户记录。
 func (r *userRepository) Delete(ctx context.Context, id uint) error {
-	defer middleware.Span(ctx)()
-
 	start := time.Now()
-	tx := r.sqlExec(ctx, "sql: DELETE FROM users WHERE id = ?", func() *gorm.DB {
-		return r.db.Delete(&model.User{}, id)
-	})
+	tx := r.db.WithContext(ctx).Delete(&model.User{}, id)
 
 	logger.Debug("数据库：删除用户",
 		zap.Uint("id", id),
@@ -129,15 +112,6 @@ func (r *userRepository) Delete(ctx context.Context, id uint) error {
 		zap.Error(tx.Error),
 	)
 	return tx.Error
-}
-
-// sqlExec 执行一条 SQL，并把它包成一个独立的 span。
-// 这样每个方法体里只剩一行调用，SQL 耗时与语句都能在采集端看到。
-func (r *userRepository) sqlExec(ctx context.Context, name string, exec func() *gorm.DB) *gorm.DB {
-	end := middleware.SpanNamed(ctx, name)
-	tx := exec()
-	end()
-	return tx
 }
 
 // dbError 过滤掉“记录不存在”这种预期内的错误，避免调试日志里出现噪音。
