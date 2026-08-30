@@ -166,7 +166,7 @@ log:
   level: info
 
 collector:
-  url: http://localhost:4318/v1/traces
+  url: http://localhost:8086/api/traces/report
   batch_size: 1000
   flush_interval: 30s
 ```
@@ -177,7 +177,7 @@ collector:
 | database.path | SQLite 数据库路径 | ./data.db |
 | log.path | 日志目录 | ./logs |
 | log.level | 日志级别 | info |
-| collector.url | Trace 采集端接收地址 | http://localhost:4318/v1/traces |
+| collector.url | Trace 采集端接收地址 | http://localhost:8086/api/traces/report |
 | collector.batch_size | 缓冲达到该数量立即批量上报 | 1000 |
 | collector.flush_interval | 定时批量上报间隔 | 30s |
 

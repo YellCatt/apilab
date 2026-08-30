@@ -81,7 +81,7 @@ func createDefaultConfig(path string) error {
 			Level: "info",
 		},
 		Collector: CollectorConfig{
-			URL:           "http://localhost:4318/v1/traces",
+			URL:           "http://localhost:8086/api/traces/report",
 			BatchSize:     1000,
 			FlushInterval: "30s",
 		},
@@ -119,8 +119,11 @@ func GetLogLevel() string {
 	return cfg.Log.Level
 }
 
-// GetCollectorURL 返回采集端接收地址。
+// GetCollectorURL 返回采集端接收地址，未配置时默认 http://localhost:8086/api/traces/report。
 func GetCollectorURL() string {
+	if cfg.Collector.URL == "" {
+		return "http://localhost:8086/api/traces/report"
+	}
 	return cfg.Collector.URL
 }
 
