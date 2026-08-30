@@ -21,7 +21,7 @@ func main() {
 	config.LoadConfig()
 
 	if err := config.InitDirectories(); err != nil {
-		log.Fatalf("failed to init directories: %v", err)
+		log.Fatalf("初始化目录失败: %v", err)
 	}
 
 	logOpts := logger.Options{
@@ -32,12 +32,12 @@ func main() {
 		DisableConsole: config.IsLogConsoleDisabled(),
 	}
 	if err := logger.Init(logOpts); err != nil {
-		log.Fatalf("failed to init logger: %v", err)
+		log.Fatalf("初始化日志组件失败: %v", err)
 	}
 	defer logger.Close()
 
 	// 启动参数落一份调试日志，排查环境问题时不必再翻配置文件。
-	logger.Debug("configuration loaded",
+	logger.Debug("配置加载完成",
 		zap.Int("server.port", config.GetServerPort()),
 		zap.String("database.path", config.GetDatabasePath()),
 		zap.String("log.path", logOpts.Dir),
@@ -63,7 +63,7 @@ func main() {
 	defer traceService.Stop()
 	traceController := controller.NewTraceController(traceService)
 
-	logger.Debug("dependencies initialized",
+	logger.Debug("依赖注入完成",
 		zap.String("db_path", config.GetDatabasePath()),
 		zap.String("collector_url", config.GetCollectorURL()),
 	)
@@ -72,7 +72,7 @@ func main() {
 
 	port := config.GetServerPort()
 	addr := fmt.Sprintf(":%d", port)
-	logger.Debug("routes registered",
+	logger.Debug("路由注册完成",
 		zap.Strings("routes", []string{
 			"GET /health",
 			"GET /status",
@@ -86,9 +86,9 @@ func main() {
 			"GET /swagger/",
 		}),
 	)
-	logger.Info("server starting", zap.String("addr", addr), zap.Int("port", port))
+	logger.Info("HTTP 服务启动中", zap.String("addr", addr), zap.Int("port", port))
 	if err := http.ListenAndServe(addr, r); err != nil {
-		logger.Fatal("server exited", zap.Error(err))
+		logger.Fatal("HTTP 服务异常退出", zap.Error(err))
 	}
-	logger.Debug("server shutdown complete")
+	logger.Debug("HTTP 服务已正常关闭")
 }

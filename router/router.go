@@ -17,7 +17,7 @@ func NewRouter(userController *controller.UserController, statusController *cont
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", middleware.RequestLog(func(w http.ResponseWriter, r *http.Request) {
-		logger.Debug("health check", middleware.Fields(r)...)
+		logger.Debug("健康检查", middleware.Fields(r)...)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","message":"Service is running"}`))
@@ -38,7 +38,7 @@ func NewRouter(userController *controller.UserController, statusController *cont
 	).ServeHTTP))
 
 	mux.HandleFunc("GET /swagger/doc.json", middleware.RequestLog(func(w http.ResponseWriter, r *http.Request) {
-		logger.Debug("serving swagger doc", append(middleware.Fields(r), zap.Int("bytes", len(swaggerDoc)))...)
+		logger.Debug("提供 Swagger 文档", append(middleware.Fields(r), zap.Int("bytes", len(swaggerDoc)))...)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(swaggerDoc))
 	}))

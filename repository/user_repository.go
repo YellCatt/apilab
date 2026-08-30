@@ -33,7 +33,7 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 func (r *userRepository) Create(user *model.User) error {
 	start := time.Now()
 	tx := r.db.Create(user)
-	logger.Debug("db: insert user",
+	logger.Debug("数据库：新增用户",
 		zap.String("name", user.Name),
 		zap.Int("age", user.Age),
 		zap.Duration("cost", time.Since(start)),
@@ -48,7 +48,7 @@ func (r *userRepository) GetByID(id uint) (*model.User, error) {
 	var user model.User
 	start := time.Now()
 	tx := r.db.First(&user, id)
-	logger.Debug("db: select user by id",
+	logger.Debug("数据库：按 ID 查询用户",
 		zap.Uint("id", id),
 		zap.Duration("cost", time.Since(start)),
 		zap.Bool("found", tx.Error == nil),
@@ -68,7 +68,7 @@ func (r *userRepository) GetAll() ([]model.User, error) {
 	var users []model.User
 	start := time.Now()
 	tx := r.db.Find(&users)
-	logger.Debug("db: select all users",
+	logger.Debug("数据库：查询全部用户",
 		zap.Duration("cost", time.Since(start)),
 		zap.Int("rows", len(users)),
 		zap.Error(tx.Error),
@@ -80,7 +80,7 @@ func (r *userRepository) GetAll() ([]model.User, error) {
 func (r *userRepository) Update(user *model.User) error {
 	start := time.Now()
 	tx := r.db.Save(user)
-	logger.Debug("db: update user",
+	logger.Debug("数据库：更新用户",
 		zap.Uint("id", user.ID),
 		zap.String("name", user.Name),
 		zap.Int("age", user.Age),
@@ -95,7 +95,7 @@ func (r *userRepository) Update(user *model.User) error {
 func (r *userRepository) Delete(id uint) error {
 	start := time.Now()
 	tx := r.db.Delete(&model.User{}, id)
-	logger.Debug("db: delete user",
+	logger.Debug("数据库：删除用户",
 		zap.Uint("id", id),
 		zap.Duration("cost", time.Since(start)),
 		zap.Int64("rows", tx.RowsAffected),

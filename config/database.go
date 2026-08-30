@@ -19,28 +19,28 @@ const slowSQLThreshold = 200 * time.Millisecond
 // NewDatabase 根据配置创建并返回一个 SQLite 数据库连接，同时自动迁移 User 模型。
 func NewDatabase() *gorm.DB {
 	start := time.Now()
-	logger.Debug("opening database", zap.String("path", cfg.Database.Path))
+	logger.Debug("正在打开数据库", zap.String("path", cfg.Database.Path))
 
 	db, err := gorm.Open(sqlite.Open(cfg.Database.Path), &gorm.Config{
 		// SQL 日志接到 zap：调试级别开启时打印全部 SQL，否则只打印慢查询与错误。
 		Logger: newGormLogger(),
 	})
 	if err != nil {
-		logger.Error("failed to open database",
+		logger.Error("打开数据库失败",
 			zap.String("path", cfg.Database.Path), zap.Duration("cost", time.Since(start)), zap.Error(err))
-		log.Fatalf("failed to open database: %v", err)
+		log.Fatalf("打开数据库失败: %v", err)
 	}
-	logger.Debug("database opened",
+	logger.Debug("数据库已打开",
 		zap.String("path", cfg.Database.Path), zap.Duration("cost", time.Since(start)))
 
 	migrateStart := time.Now()
 	err = db.AutoMigrate(&model.User{})
 	if err != nil {
-		logger.Error("failed to migrate database",
+		logger.Error("数据库迁移失败",
 			zap.Duration("cost", time.Since(migrateStart)), zap.Error(err))
-		log.Fatalf("failed to migrate database: %v", err)
+		log.Fatalf("数据库迁移失败: %v", err)
 	}
-	logger.Debug("database migrated",
+	logger.Debug("数据库迁移完成",
 		zap.String("model", "User"), zap.Duration("cost", time.Since(migrateStart)))
 
 	return db
@@ -65,5 +65,5 @@ type gormLogWriter struct{}
 
 // Printf 接收 GORM 的格式化输出并落到 zap。
 func (gormLogWriter) Printf(format string, args ...interface{}) {
-	logger.Debug("sql", zap.String("detail", fmt.Sprintf(format, args...)))
+	logger.Debug("SQL 语句", zap.String("detail", fmt.Sprintf(format, args...)))
 }

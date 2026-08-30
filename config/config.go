@@ -54,20 +54,20 @@ func LoadConfig() {
 	configPath := "config/config.yaml"
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Println("config file not found, creating default config...")
+		log.Println("未找到配置文件，正在创建默认配置...")
 		if err := createDefaultConfig(configPath); err != nil {
-			log.Fatalf("failed to create default config: %v", err)
+			log.Fatalf("创建默认配置失败: %v", err)
 		}
 	}
 
 	file, err := os.ReadFile(configPath)
 	if err != nil {
-		log.Fatalf("failed to read config file: %v", err)
+		log.Fatalf("读取配置文件失败: %v", err)
 	}
 
 	err = yaml.Unmarshal(file, &cfg)
 	if err != nil {
-		log.Fatalf("failed to parse config file: %v", err)
+		log.Fatalf("解析配置文件失败: %v", err)
 	}
 }
 

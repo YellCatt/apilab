@@ -23,11 +23,11 @@ func NewStatusController(service service.StatusService) *StatusController {
 // GetStatus 处理 GET /status 请求，返回系统运行状态。
 func (c *StatusController) GetStatus(w http.ResponseWriter, r *http.Request) {
 	fields := middleware.Fields(r)
-	logger.Debug("get status request", fields...)
+	logger.Debug("收到系统状态查询请求", fields...)
 
 	status, err := c.service.GetStatus()
 	if err != nil {
-		logger.Error("failed to get system status", append(fields, zap.Error(err))...)
+		logger.Error("获取系统状态失败", append(fields, zap.Error(err))...)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -35,10 +35,10 @@ func (c *StatusController) GetStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(status); err != nil {
-		logger.Error("failed to encode system status", append(fields, zap.Error(err))...)
+		logger.Error("序列化系统状态响应失败", append(fields, zap.Error(err))...)
 		return
 	}
-	logger.Debug("system status returned",
+	logger.Debug("系统状态查询成功",
 		append(fields,
 			zap.Float64("cpu_usage", status.Cpu.Usage),
 			zap.Float64("mem_usage", status.Memory.Usage),

@@ -24,20 +24,20 @@ func NewTraceController(service service.TraceService) *TraceController {
 // Report 处理 POST /api/traces/report 请求，接收 trace 事件并交给服务层缓冲、批量转发采集端。
 func (c *TraceController) Report(w http.ResponseWriter, r *http.Request) {
 	fields := middleware.Fields(r)
-	logger.Debug("trace report request", append(fields, zap.Int64("content_length", r.ContentLength))...)
+	logger.Debug("收到 Trace 上报请求", append(fields, zap.Int64("content_length", r.ContentLength))...)
 
 	var req model.TraceReportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logger.Warn("invalid trace report payload", append(fields, zap.Error(err))...)
+		logger.Warn("Trace 上报请求体无效", append(fields, zap.Error(err))...)
 		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	if len(req.Events) == 0 {
-		logger.Warn("trace report payload has no events", fields...)
+		logger.Warn("Trace 上报请求中没有任何事件", fields...)
 		http.Error(w, "events must not be empty", http.StatusBadRequest)
 		return
 	}
-	logger.Debug("trace events accepted", append(fields, zap.Int("count", len(req.Events)))...)
+	logger.Debug("Trace 事件接收成功", append(fields, zap.Int("count", len(req.Events)))...)
 
 	c.service.Report(req.Events)
 
@@ -48,8 +48,8 @@ func (c *TraceController) Report(w http.ResponseWriter, r *http.Request) {
 		"message": "ok",
 		"count":   len(req.Events),
 	}); err != nil {
-		logger.Error("failed to encode trace report response", append(fields, zap.Int("count", len(req.Events)), zap.Error(err))...)
+		logger.Error("序列化 Trace 上报响应失败", append(fields, zap.Int("count", len(req.Events)), zap.Error(err))...)
 		return
 	}
-	logger.Debug("trace report response sent", append(fields, zap.Int("count", len(req.Events)))...)
+	logger.Debug("Trace 上报响应已发送", append(fields, zap.Int("count", len(req.Events)))...)
 }

@@ -34,7 +34,7 @@ func RequestLog(next http.HandlerFunc) http.HandlerFunc {
 		r = r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id))
 
 		start := time.Now()
-		logger.Debug("request started",
+		logger.Debug("请求开始处理",
 			zap.String("request_id", id),
 			zap.String("method", r.Method),
 			zap.String("path", r.URL.Path),
@@ -58,13 +58,13 @@ func RequestLog(next http.HandlerFunc) http.HandlerFunc {
 		}
 		switch {
 		case rec.status >= http.StatusInternalServerError:
-			logger.Error("request failed", fields...)
+			logger.Error("请求处理失败", fields...)
 		case cost >= slowRequestThreshold:
-			logger.Warn("slow request", fields...)
+			logger.Warn("慢请求", fields...)
 		case rec.status >= http.StatusBadRequest:
-			logger.Warn("request rejected", fields...)
+			logger.Warn("请求被拒绝", fields...)
 		default:
-			logger.Info("request completed", fields...)
+			logger.Info("请求处理完成", fields...)
 		}
 	}
 }

@@ -177,7 +177,7 @@ func (s *statusService) sampler() {
 		// 采样每秒一次，调试日志只在首帧输出，避免日志被快照淹没。
 		if !sampled {
 			sampled = true
-			logger.Debug("system status snapshot ready",
+			logger.Debug("系统状态快照已生成",
 				zap.Float64("cpu_usage", status.Cpu.Usage),
 				zap.Float64("mem_usage", status.Memory.Usage),
 				zap.Int("disk_count", len(status.Disk)),
@@ -191,7 +191,7 @@ func (s *statusService) sampler() {
 // logSampleError 记录单个指标采样失败。这类失败不影响其它指标，用 Debug 级别即可。
 func logSampleError(metric string, err error) {
 	if err != nil {
-		logger.Debug("failed to sample metric", zap.String("metric", metric), zap.Error(err))
+		logger.Debug("指标采样失败", zap.String("metric", metric), zap.Error(err))
 	}
 }
 
