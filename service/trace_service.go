@@ -33,6 +33,10 @@ const errorLogEvery = 10
 // maxErrorBody 采集端错误响应体最多记录这么多字节，防止日志被大响应撑爆。
 const maxErrorBody = 512
 
+// eventLevelError 事件级别里的错误档，与 trace 包 newEvent 写入的取值一致。
+// 该级别的事件即使在 info 配置下也要逐条可见。
+const eventLevelError = "error"
+
 // TraceService Trace 事件上报业务逻辑接口。
 type TraceService interface {
 	// Report 接收一批 trace 事件：写入本地日志并入缓冲，攒够一批或到定时刷新时批量发给采集端。
@@ -58,6 +62,10 @@ type traceService struct {
 	stopCh       chan struct{} // 停止信号
 	doneCh       chan struct{} // 后台协程退出确认
 
+	// wg 跟踪 Report 丢到后台的异步 flush，Stop 时统一等待，避免进程退出掐断发送。
+	wg      sync.WaitGroup
+	stopped bool // Stop 是否已调用（受 mu 保护），用于避免 Stop 之后又 Add 到 wg
+
 	received uint64 // 累计写入缓冲的事件数（受 mu 保护）
 }
 
@@ -80,29 +88,15 @@ func NewTraceService(collectorURL string, batchSize int, flushInterval time.Dura
 	return s
 }
 
-// Report 接收 trace 事件：先逐条写入本地日志，再追加到缓冲。
-// 一旦缓冲数量达到 batchSize，立即取出一批发送给采集端。
+// Report 接收 trace 事件：先写本地日志，再追加到缓冲。
+// 一旦缓冲数量达到 batchSize，立即取出若干批交给后台协程发送给采集端。
 func (s *traceService) Report(events []model.TraceEvent) {
 	if len(events) == 0 {
 		return
 	}
 
-	// 整合到本地日志，保证即便采集端不可用也有本地可查的记录。
-	// 用 Debug 级别：现在每个业务请求都会自动产生一条事件，逐条打 Info 会淹没访问日志。
-	for _, e := range events {
-		logger.Debug("收到 Trace 事件",
-			zap.String("trace_id", e.TraceID),
-			zap.String("span_id", e.SpanID),
-			zap.String("parent_span_id", e.ParentSpanID),
-			zap.Time("timestamp", e.Timestamp),
-			zap.String("level", e.Level),
-			zap.String("module", e.Module),
-			zap.String("event", e.Event),
-			zap.String("message", e.Message),
-			zap.Any("params", e.Params),
-			zap.String("error_message", e.ErrorMessage),
-		)
-	}
+	// 本地留痕，保证即便采集端不可用也有可查记录。
+	logEvents(events)
 
 	s.mu.Lock()
 	s.buffer = append(s.buffer, events...)
@@ -116,6 +110,10 @@ func (s *traceService) Report(events []model.TraceEvent) {
 		s.buffer = append([]model.TraceEvent(nil), s.buffer[s.batchSize:]...)
 	}
 	remaining := len(s.buffer)
+	stopped := s.stopped
+	if !stopped {
+		s.wg.Add(len(batches))
+	}
 	s.mu.Unlock()
 
 	// 用 Info 级别：入缓冲是整条上报链路的起点，必须无条件可见，
@@ -129,8 +127,77 @@ func (s *traceService) Report(events []model.TraceEvent) {
 		zap.Int("batch_size", s.batchSize),
 	)
 
+	if stopped {
+		// 已停止：同步发送，否则 goroutine 会脱离 Stop 的等待范围、被进程退出掐断。
+		for _, batch := range batches {
+			s.flush(batch)
+		}
+		return
+	}
+	// 异步发送：flush 内部是带 10 秒超时的 HTTP 请求，采集端不通时会把调用方
+	// （HTTP handler / OTel 导出协程）整个卡住，并发一高就耗尽连接。
+	// 丢到后台后 Report 永不阻塞，失败照样由 reportFailure 记录。
 	for _, batch := range batches {
-		s.flush(batch)
+		go func(b []model.TraceEvent) {
+			defer s.wg.Done()
+			s.flush(b)
+		}(batch)
+	}
+}
+
+// logEvents 为本批事件生成本地日志。
+//
+// 这里刻意不逐条打印：一个请求会展开成 6-22 条事件（每个 span 起止各一条），
+// 逐条 Debug 在 debug 配置下等于把访问日志再放大一个数量级，且全是同步写盘。
+// 改成"一条汇总 + 错误事件逐条"：正常情况下一批只有汇总那一行，
+// 真正需要关注的错误事件又不会被汇总淹掉。
+func logEvents(events []model.TraceEvent) {
+	// 错误事件走 Error 级，不受 debug 开关影响。
+	logErrorEvents(events)
+
+	if !logger.DebugEnabled() {
+		return
+	}
+	var errs, warns int
+	traces := make(map[string]struct{}, 8)
+	modules := make(map[string]int, 4)
+	for _, e := range events {
+		switch e.Level {
+		case eventLevelError:
+			errs++
+		case "warn":
+			warns++
+		}
+		traces[e.TraceID] = struct{}{}
+		modules[e.Module]++
+	}
+	logger.Debug("收到 Trace 事件",
+		zap.Int("count", len(events)),
+		zap.Int("traces", len(traces)),
+		zap.Any("modules", modules),
+		zap.Int("warn", warns),
+		zap.Int("error", errs),
+		// 抽样一条，便于确认字段格式；完整内容以采集端为准。
+		zap.String("sample", events[0].Message),
+	)
+}
+
+// logErrorEvents 把错误级别的事件逐条记 Error 日志。
+// 这类事件数量极少但必须无条件可见，混在汇总里等于看不见。
+func logErrorEvents(events []model.TraceEvent) {
+	for _, e := range events {
+		if e.Level != eventLevelError && e.ErrorMessage == "" {
+			continue
+		}
+		logger.Error("Trace 事件标记为错误",
+			zap.String("trace_id", e.TraceID),
+			zap.String("span_id", e.SpanID),
+			zap.String("module", e.Module),
+			zap.String("event", e.Event),
+			zap.String("message", e.Message),
+			zap.String("error_message", e.ErrorMessage),
+			zap.Any("params", e.Params),
+		)
 	}
 }
 
@@ -175,7 +242,7 @@ func (s *traceService) flushBuffer() {
 // flush 将一批事件 POST 到采集端。
 //
 // 发送失败会记录错误日志（含失败原因分类与连续失败次数）并丢弃该批，避免阻塞调用方；
-// 本地日志已在 Report 阶段逐条落盘，丢弃只影响转发，不影响本地留痕。
+// 本地日志已在 Report 阶段落盘（汇总 + 错误逐条），丢弃只影响转发，不影响本地留痕。
 func (s *traceService) flush(events []model.TraceEvent) {
 	if len(events) == 0 {
 		return
@@ -333,15 +400,21 @@ func failureHint(reason string) string {
 }
 
 // Stop 停止定时刷新协程并刷新剩余缓冲，用于程序退出前的优雅关闭。
+// 可重复调用，第二次及以后直接返回。
 func (s *traceService) Stop() {
-	select {
-	case <-s.stopCh:
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
 		return
-	default:
 	}
+	s.stopped = true
+	s.mu.Unlock()
+
 	logger.Debug("Trace 上报服务停止中，正在刷新剩余缓冲")
 	close(s.stopCh)
 	<-s.doneCh
+	// 等 Report 丢出去的异步 flush 收尾，否则进程一退这些请求就被掐断。
+	s.wg.Wait()
 
 	// 退出时汇总一次：进程活着时失败日志可能被淹没，这里保证最后一定能看到结论。
 	if dropped, failures := s.failureStats(); dropped > 0 || failures > 0 {

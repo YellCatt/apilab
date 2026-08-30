@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/YellCatt/apilab/logger"
 	"github.com/YellCatt/apilab/middleware"
@@ -23,6 +24,7 @@ func NewTraceController(service service.TraceService) *TraceController {
 
 // Report 处理 POST /api/traces/report 请求，接收 trace 事件并交给服务层缓冲、批量转发采集端。
 func (c *TraceController) Report(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	fields := middleware.Fields(r)
 	logger.Debug("收到 Trace 上报请求", append(fields, zap.Int64("content_length", r.ContentLength))...)
 
@@ -51,5 +53,9 @@ func (c *TraceController) Report(w http.ResponseWriter, r *http.Request) {
 		logger.Error("序列化 Trace 上报响应失败", append(fields, zap.Int("count", len(req.Events)), zap.Error(err))...)
 		return
 	}
-	logger.Debug("Trace 上报响应已发送", append(fields, zap.Int("count", len(req.Events)))...)
+	logger.Debug("Trace 上报响应已发送",
+		append(fields,
+			zap.Int("count", len(req.Events)),
+			zap.Duration("handler_cost", time.Since(start)),
+		)...)
 }

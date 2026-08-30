@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/YellCatt/apilab/logger"
 	"github.com/YellCatt/apilab/middleware"
@@ -22,6 +23,7 @@ func NewStatusController(service service.StatusService) *StatusController {
 
 // GetStatus 处理 GET /status 请求，返回系统运行状态。
 func (c *StatusController) GetStatus(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	ctx := r.Context()
 
 	fields := middleware.Fields(r)
@@ -46,5 +48,6 @@ func (c *StatusController) GetStatus(w http.ResponseWriter, r *http.Request) {
 			zap.Float64("mem_usage", status.Memory.Usage),
 			zap.Int("disk_count", len(status.Disk)),
 			zap.Uint64("uptime", status.Uptime),
+			zap.Duration("handler_cost", time.Since(start)),
 		)...)
 }

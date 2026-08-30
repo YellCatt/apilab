@@ -36,6 +36,10 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 
 // Create 创建新用户记录。
 func (r *userRepository) Create(ctx context.Context, user *model.User) error {
+	logger.Debug("数据库：准备新增用户",
+		zap.String("name", user.Name),
+		zap.Int("age", user.Age),
+	)
 	start := time.Now()
 	tx := r.db.WithContext(ctx).Create(user)
 
@@ -52,6 +56,7 @@ func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 // GetByID 根据 ID 查询用户，返回 nil,nil 表示未找到记录。
 func (r *userRepository) GetByID(ctx context.Context, id uint) (*model.User, error) {
 	var user model.User
+	logger.Debug("数据库：准备按 ID 查询用户", zap.Uint("id", id))
 	start := time.Now()
 	tx := r.db.WithContext(ctx).First(&user, id)
 
@@ -73,6 +78,7 @@ func (r *userRepository) GetByID(ctx context.Context, id uint) (*model.User, err
 // GetAll 查询所有用户记录。
 func (r *userRepository) GetAll(ctx context.Context) ([]model.User, error) {
 	var users []model.User
+	logger.Debug("数据库：准备查询全部用户")
 	start := time.Now()
 	tx := r.db.WithContext(ctx).Find(&users)
 
@@ -86,6 +92,11 @@ func (r *userRepository) GetAll(ctx context.Context) ([]model.User, error) {
 
 // Update 更新指定用户的所有字段。
 func (r *userRepository) Update(ctx context.Context, user *model.User) error {
+	logger.Debug("数据库：准备更新用户",
+		zap.Uint("id", user.ID),
+		zap.String("name", user.Name),
+		zap.Int("age", user.Age),
+	)
 	start := time.Now()
 	tx := r.db.WithContext(ctx).Save(user)
 
@@ -102,6 +113,7 @@ func (r *userRepository) Update(ctx context.Context, user *model.User) error {
 
 // Delete 根据 ID 删除用户记录。
 func (r *userRepository) Delete(ctx context.Context, id uint) error {
+	logger.Debug("数据库：准备删除用户", zap.Uint("id", id))
 	start := time.Now()
 	tx := r.db.WithContext(ctx).Delete(&model.User{}, id)
 

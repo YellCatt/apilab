@@ -1,0 +1,149 @@
+2026-08-30 19:25:00	info	logger/logger.go:280	服务启动	{"version": "v1.0.0-20260830-1630", "go_version": "go1.26.3"}
+2026-08-30 19:25:00	debug	logger/logger.go:304	配置加载完成	{"server.port": 8084, "database.path": "./data.db", "log.path": "./logs", "log.level": "debug", "log.mode": "single", "log.levels": [], "log.disable_console": false, "collector.url": "http://localhost:8086/api/traces/report", "collector.batch_size": 100, "collector.flush_interval": 30}
+2026-08-30 19:25:00	debug	logger/logger.go:304	Trace 上报服务启动中	{"collector_url": "http://localhost:8086/api/traces/report", "batch_size": 100, "flush_interval": 30}
+2026-08-30 19:25:00	debug	logger/logger.go:304	链路追踪已启用	{"service_name": "apilab", "batch_timeout": 1, "max_queue_size": 4096}
+2026-08-30 19:25:00	debug	logger/logger.go:304	正在打开数据库	{"path": "./data.db"}
+2026-08-30 19:25:00	debug	logger/logger.go:304	数据库已打开	{"path": "./data.db", "cost": 0.0015424}
+2026-08-30 19:25:00	debug	logger/logger.go:304	GORM 链路追踪插件已注册
+2026-08-30 19:25:00	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.000ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name=\"users\""}
+2026-08-30 19:25:00	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[1.902ms] [rows:0] CREATE TABLE `users` (`id` integer PRIMARY KEY AUTOINCREMENT,`created_at` datetime,`updated_at` datetime,`deleted_at` datetime,`name` text NOT NULL,`age` integer)"}
+2026-08-30 19:25:00	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[2.611ms] [rows:0] CREATE INDEX `idx_users_deleted_at` ON `users`(`deleted_at`)"}
+2026-08-30 19:25:00	debug	logger/logger.go:304	数据库迁移完成	{"model": "User", "cost": 0.0060807}
+2026-08-30 19:25:00	debug	logger/logger.go:304	依赖注入完成	{"db_path": "./data.db", "collector_url": "http://localhost:8086/api/traces/report"}
+2026-08-30 19:25:00	debug	logger/logger.go:304	路由注册完成	{"routes": ["GET /health", "GET /status", "POST /api/users", "GET /api/users", "GET /api/users/{id}", "PUT /api/users/{id}", "DELETE /api/users/{id}", "POST /api/traces/report", "GET /swagger/doc.json", "GET /swagger/"]}
+2026-08-30 19:25:00	info	logger/logger.go:280	HTTP 服务启动中	{"addr": ":8084", "port": 8084}
+2026-08-30 19:25:00	debug	logger/logger.go:304	HTTP 服务启动完成，等待请求中	{"addr": ":8084", "port": 8084}
+2026-08-30 19:25:01	debug	logger/logger.go:304	导出 span 批次	{"spans": 3, "events": 6}
+2026-08-30 19:25:01	debug	logger/logger.go:304	收到 Trace 事件	{"count": 6, "traces": 3, "modules": {"db":6}, "warn": 0, "error": 0, "sample": "sql: SELECT count(*) FROM sqlite_master WHERE type='table' AND name=\"?\""}
+2026-08-30 19:25:01	info	logger/logger.go:280	Trace 事件已写入缓冲	{"received": 6, "total_received": 6, "buffered": 6, "remaining": 6, "batches": 0, "batch_size": 100}
+2026-08-30 19:25:02	debug	logger/logger.go:304	系统状态快照已生成	{"cpu_usage": 2.513227513227513, "mem_usage": 72, "disk_count": 3, "uptime": 135883, "cost": 0.0317342}
+2026-08-30 19:25:25	debug	logger/logger.go:304	请求开始处理	{"request_id": "70fadfdea1539b3f51093de9", "method": "GET", "path": "/health", "query": "", "remote_addr": "[::1]:11473", "content_length": 0, "user_agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; zh-CN) WindowsPowerShell/5.1.22621.6133"}
+2026-08-30 19:25:25	debug	logger/logger.go:304	健康检查	{"request_id": "70fadfdea1539b3f51093de9", "method": "GET", "path": "/health"}
+2026-08-30 19:25:25	info	logger/logger.go:280	请求处理完成	{"request_id": "70fadfdea1539b3f51093de9", "method": "GET", "path": "/health", "status": 200, "cost": 0, "bytes": 46}
+2026-08-30 19:25:25	debug	logger/logger.go:304	请求开始处理	{"request_id": "aeb09e2f4cc52988fb8db989", "method": "POST", "path": "/api/traces/report", "query": "", "remote_addr": "[::1]:11473", "content_length": 168, "user_agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; zh-CN) WindowsPowerShell/5.1.22621.6133"}
+2026-08-30 19:25:25	debug	logger/logger.go:304	收到 Trace 上报请求	{"request_id": "aeb09e2f4cc52988fb8db989", "method": "POST", "path": "/api/traces/report", "content_length": 168}
+2026-08-30 19:25:25	debug	logger/logger.go:304	Trace 事件接收成功	{"request_id": "aeb09e2f4cc52988fb8db989", "method": "POST", "path": "/api/traces/report", "count": 1}
+2026-08-30 19:25:25	debug	logger/logger.go:304	收到 Trace 事件	{"count": 1, "traces": 1, "modules": {"http":1}, "warn": 0, "error": 0, "sample": "GET /health"}
+2026-08-30 19:25:25	info	logger/logger.go:280	Trace 事件已写入缓冲	{"received": 1, "total_received": 7, "buffered": 7, "remaining": 7, "batches": 0, "batch_size": 100}
+2026-08-30 19:25:25	debug	logger/logger.go:304	Trace 上报响应已发送	{"request_id": "aeb09e2f4cc52988fb8db989", "method": "POST", "path": "/api/traces/report", "count": 1, "handler_cost": 0.0133346}
+2026-08-30 19:25:25	info	logger/logger.go:280	请求处理完成	{"request_id": "aeb09e2f4cc52988fb8db989", "method": "POST", "path": "/api/traces/report", "status": 200, "cost": 0.0133346, "bytes": 36}
+2026-08-30 19:25:30	debug	logger/logger.go:304	定时器触发批量刷新	{"count": 7, "url": "http://localhost:8086/api/traces/report"}
+2026-08-30 19:25:30	debug	logger/logger.go:304	Trace 批次序列化完成	{"count": 7, "bytes": 2850, "cost": 0}
+2026-08-30 19:25:30	error	logger/logger.go:296	采集端不可达，Trace 事件已丢弃	{"url": "http://localhost:8086/api/traces/report", "reason": "connect_refused", "hint": "检查采集端是否已启动、url 的主机名与端口是否正确", "count": 7, "consecutive_failures": 1, "total_dropped": 7, "cost": 0.0063086, "error": "Post \"http://localhost:8086/api/traces/report\": dial tcp [::1]:8086: connectex: No connection could be made because the target machine actively refused it."}
+github.com/YellCatt/apilab/logger.Error
+	D:/d/apilab/logger/logger.go:296
+github.com/YellCatt/apilab/service.(*traceService).reportFailure
+	D:/d/apilab/service/trace_service.go:331
+github.com/YellCatt/apilab/service.(*traceService).flush
+	D:/d/apilab/service/trace_service.go:273
+github.com/YellCatt/apilab/service.(*traceService).flushBuffer
+	D:/d/apilab/service/trace_service.go:239
+github.com/YellCatt/apilab/service.(*traceService).flushLoop
+	D:/d/apilab/service/trace_service.go:215
+2026-08-30 19:26:00	debug	logger/logger.go:304	缓冲为空，跳过刷新	{"total_received": 7}
+2026-08-30 19:26:05	info	logger/logger.go:280	服务启动	{"version": "v1.0.0-20260830-1630", "go_version": "go1.26.3"}
+2026-08-30 19:26:05	debug	logger/logger.go:304	配置加载完成	{"server.port": 8084, "database.path": "./data.db", "log.path": "./logs", "log.level": "debug", "log.mode": "single", "log.levels": [], "log.disable_console": false, "collector.url": "http://localhost:8086/api/traces/report", "collector.batch_size": 100, "collector.flush_interval": 30}
+2026-08-30 19:26:05	debug	logger/logger.go:304	Trace 上报服务启动中	{"collector_url": "http://localhost:8086/api/traces/report", "batch_size": 100, "flush_interval": 30}
+2026-08-30 19:26:05	debug	logger/logger.go:304	链路追踪已启用	{"service_name": "apilab", "batch_timeout": 1, "max_queue_size": 4096}
+2026-08-30 19:26:05	debug	logger/logger.go:304	正在打开数据库	{"path": "./data.db"}
+2026-08-30 19:26:05	debug	logger/logger.go:304	数据库已打开	{"path": "./data.db", "cost": 0.0010246}
+2026-08-30 19:26:05	debug	logger/logger.go:304	GORM 链路追踪插件已注册
+2026-08-30 19:26:05	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.545ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name=\"users\""}
+2026-08-30 19:26:05	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.000ms] [rows:2] SELECT sql FROM sqlite_master WHERE type IN (\"table\",\"index\") AND tbl_name = \"users\" AND sql IS NOT NULL order by type = \"table\" desc"}
+2026-08-30 19:26:05	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.000ms] [rows:-] SELECT * FROM `users` LIMIT 1"}
+2026-08-30 19:26:05	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.000ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type = \"index\" AND tbl_name = \"users\" AND name = \"idx_users_deleted_at\""}
+2026-08-30 19:26:05	debug	logger/logger.go:304	数据库迁移完成	{"model": "User", "cost": 0.0010747}
+2026-08-30 19:26:05	debug	logger/logger.go:304	依赖注入完成	{"db_path": "./data.db", "collector_url": "http://localhost:8086/api/traces/report"}
+2026-08-30 19:26:05	debug	logger/logger.go:304	路由注册完成	{"routes": ["GET /health", "GET /status", "POST /api/users", "GET /api/users", "GET /api/users/{id}", "PUT /api/users/{id}", "DELETE /api/users/{id}", "POST /api/traces/report", "GET /swagger/doc.json", "GET /swagger/"]}
+2026-08-30 19:26:05	info	logger/logger.go:280	HTTP 服务启动中	{"addr": ":8084", "port": 8084}
+2026-08-30 19:26:05	debug	logger/logger.go:304	HTTP 服务启动完成，等待请求中	{"addr": ":8084", "port": 8084}
+2026-08-30 19:26:05	error	logger/logger.go:296	服务运行失败	{"error": "HTTP 服务异常退出: listen tcp :8084: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted."}
+github.com/YellCatt/apilab/logger.Error
+	D:/d/apilab/logger/logger.go:296
+main.run
+	D:/d/apilab/main.go:172
+main.main
+	D:/d/apilab/main.go:38
+runtime.main
+	C:/Program Files/Go/src/runtime/proc.go:290
+2026-08-30 19:26:05	debug	logger/logger.go:304	导出 span 批次	{"spans": 4, "events": 8}
+2026-08-30 19:26:05	debug	logger/logger.go:304	收到 Trace 事件	{"count": 8, "traces": 4, "modules": {"db":8}, "warn": 0, "error": 0, "sample": "sql: SELECT count(*) FROM sqlite_master WHERE type='table' AND name=\"?\""}
+2026-08-30 19:26:05	info	logger/logger.go:280	Trace 事件已写入缓冲	{"received": 8, "total_received": 8, "buffered": 8, "remaining": 8, "batches": 0, "batch_size": 100}
+2026-08-30 19:26:05	debug	logger/logger.go:304	Trace 上报服务停止中，正在刷新剩余缓冲
+2026-08-30 19:26:05	debug	logger/logger.go:304	定时器触发批量刷新	{"count": 8, "url": "http://localhost:8086/api/traces/report"}
+2026-08-30 19:26:05	debug	logger/logger.go:304	Trace 批次序列化完成	{"count": 8, "bytes": 3220, "cost": 0.0099271}
+2026-08-30 19:26:05	error	logger/logger.go:296	采集端不可达，Trace 事件已丢弃	{"url": "http://localhost:8086/api/traces/report", "reason": "connect_refused", "hint": "检查采集端是否已启动、url 的主机名与端口是否正确", "count": 8, "consecutive_failures": 1, "total_dropped": 8, "cost": 0.0199216, "error": "Post \"http://localhost:8086/api/traces/report\": dial tcp [::1]:8086: connectex: No connection could be made because the target machine actively refused it."}
+github.com/YellCatt/apilab/logger.Error
+	D:/d/apilab/logger/logger.go:296
+github.com/YellCatt/apilab/service.(*traceService).reportFailure
+	D:/d/apilab/service/trace_service.go:331
+github.com/YellCatt/apilab/service.(*traceService).flush
+	D:/d/apilab/service/trace_service.go:273
+github.com/YellCatt/apilab/service.(*traceService).flushBuffer
+	D:/d/apilab/service/trace_service.go:239
+github.com/YellCatt/apilab/service.(*traceService).flushLoop
+	D:/d/apilab/service/trace_service.go:217
+2026-08-30 19:26:05	error	logger/logger.go:296	Trace 上报服务停止，存在未送达的事件	{"url": "http://localhost:8086/api/traces/report", "total_dropped": 8, "consecutive_failures": 1, "hint": "这些事件只存在于本地日志，未送达采集端"}
+github.com/YellCatt/apilab/logger.Error
+	D:/d/apilab/logger/logger.go:296
+github.com/YellCatt/apilab/service.(*traceService).Stop
+	D:/d/apilab/service/trace_service.go:421
+main.run
+	D:/d/apilab/main.go:185
+main.main
+	D:/d/apilab/main.go:38
+runtime.main
+	C:/Program Files/Go/src/runtime/proc.go:290
+2026-08-30 19:26:09	info	logger/logger.go:280	服务启动	{"version": "v1.0.0-20260830-1630", "go_version": "go1.26.3"}
+2026-08-30 19:26:09	debug	logger/logger.go:304	配置加载完成	{"server.port": 8084, "database.path": "./data.db", "log.path": "./logs", "log.level": "debug", "log.mode": "single", "log.levels": [], "log.disable_console": false, "collector.url": "http://localhost:8086/api/traces/report", "collector.batch_size": 100, "collector.flush_interval": 30}
+2026-08-30 19:26:09	debug	logger/logger.go:304	Trace 上报服务启动中	{"collector_url": "http://localhost:8086/api/traces/report", "batch_size": 100, "flush_interval": 30}
+2026-08-30 19:26:09	debug	logger/logger.go:304	链路追踪已启用	{"service_name": "apilab", "batch_timeout": 1, "max_queue_size": 4096}
+2026-08-30 19:26:09	debug	logger/logger.go:304	正在打开数据库	{"path": "./data.db"}
+2026-08-30 19:26:09	debug	logger/logger.go:304	数据库已打开	{"path": "./data.db", "cost": 0.0010239}
+2026-08-30 19:26:09	debug	logger/logger.go:304	GORM 链路追踪插件已注册
+2026-08-30 19:26:09	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.000ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name=\"users\""}
+2026-08-30 19:26:09	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.000ms] [rows:2] SELECT sql FROM sqlite_master WHERE type IN (\"table\",\"index\") AND tbl_name = \"users\" AND sql IS NOT NULL order by type = \"table\" desc"}
+2026-08-30 19:26:09	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.524ms] [rows:-] SELECT * FROM `users` LIMIT 1"}
+2026-08-30 19:26:09	debug	logger/logger.go:304	SQL 语句	{"detail": "D:/d/apilab/config/database.go:50\n[0.000ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type = \"index\" AND tbl_name = \"users\" AND name = \"idx_users_deleted_at\""}
+2026-08-30 19:26:09	debug	logger/logger.go:304	数据库迁移完成	{"model": "User", "cost": 0.0010715}
+2026-08-30 19:26:09	debug	logger/logger.go:304	依赖注入完成	{"db_path": "./data.db", "collector_url": "http://localhost:8086/api/traces/report"}
+2026-08-30 19:26:09	debug	logger/logger.go:304	路由注册完成	{"routes": ["GET /health", "GET /status", "POST /api/users", "GET /api/users", "GET /api/users/{id}", "PUT /api/users/{id}", "DELETE /api/users/{id}", "POST /api/traces/report", "GET /swagger/doc.json", "GET /swagger/"]}
+2026-08-30 19:26:09	info	logger/logger.go:280	HTTP 服务启动中	{"addr": ":8084", "port": 8084}
+2026-08-30 19:26:09	debug	logger/logger.go:304	HTTP 服务启动完成，等待请求中	{"addr": ":8084", "port": 8084}
+2026-08-30 19:26:09	error	logger/logger.go:296	服务运行失败	{"error": "HTTP 服务异常退出: listen tcp :8084: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted."}
+github.com/YellCatt/apilab/logger.Error
+	D:/d/apilab/logger/logger.go:296
+main.run
+	D:/d/apilab/main.go:172
+main.main
+	D:/d/apilab/main.go:38
+runtime.main
+	C:/Program Files/Go/src/runtime/proc.go:290
+2026-08-30 19:26:09	debug	logger/logger.go:304	导出 span 批次	{"spans": 4, "events": 8}
+2026-08-30 19:26:09	debug	logger/logger.go:304	收到 Trace 事件	{"count": 8, "traces": 4, "modules": {"db":8}, "warn": 0, "error": 0, "sample": "sql: SELECT count(*) FROM sqlite_master WHERE type='table' AND name=\"?\""}
+2026-08-30 19:26:09	info	logger/logger.go:280	Trace 事件已写入缓冲	{"received": 8, "total_received": 8, "buffered": 8, "remaining": 8, "batches": 0, "batch_size": 100}
+2026-08-30 19:26:09	debug	logger/logger.go:304	Trace 上报服务停止中，正在刷新剩余缓冲
+2026-08-30 19:26:09	debug	logger/logger.go:304	定时器触发批量刷新	{"count": 8, "url": "http://localhost:8086/api/traces/report"}
+2026-08-30 19:26:09	debug	logger/logger.go:304	Trace 批次序列化完成	{"count": 8, "bytes": 3220, "cost": 0.0132356}
+2026-08-30 19:26:09	error	logger/logger.go:296	采集端不可达，Trace 事件已丢弃	{"url": "http://localhost:8086/api/traces/report", "reason": "connect_refused", "hint": "检查采集端是否已启动、url 的主机名与端口是否正确", "count": 8, "consecutive_failures": 1, "total_dropped": 8, "cost": 0.0239887, "error": "Post \"http://localhost:8086/api/traces/report\": dial tcp [::1]:8086: connectex: No connection could be made because the target machine actively refused it."}
+github.com/YellCatt/apilab/logger.Error
+	D:/d/apilab/logger/logger.go:296
+github.com/YellCatt/apilab/service.(*traceService).reportFailure
+	D:/d/apilab/service/trace_service.go:331
+github.com/YellCatt/apilab/service.(*traceService).flush
+	D:/d/apilab/service/trace_service.go:273
+github.com/YellCatt/apilab/service.(*traceService).flushBuffer
+	D:/d/apilab/service/trace_service.go:239
+github.com/YellCatt/apilab/service.(*traceService).flushLoop
+	D:/d/apilab/service/trace_service.go:217
+2026-08-30 19:26:09	error	logger/logger.go:296	Trace 上报服务停止，存在未送达的事件	{"url": "http://localhost:8086/api/traces/report", "total_dropped": 8, "consecutive_failures": 1, "hint": "这些事件只存在于本地日志，未送达采集端"}
+github.com/YellCatt/apilab/logger.Error
+	D:/d/apilab/logger/logger.go:296
+github.com/YellCatt/apilab/service.(*traceService).Stop
+	D:/d/apilab/service/trace_service.go:421
+main.run
+	D:/d/apilab/main.go:185
+main.main
+	D:/d/apilab/main.go:38
+runtime.main
+	C:/Program Files/Go/src/runtime/proc.go:290

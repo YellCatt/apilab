@@ -304,6 +304,15 @@ func Debug(msg string, fields ...zap.Field) {
 	log.Debug(msg, fields...)
 }
 
+// DebugEnabled 返回当前配置是否会真正输出 Debug 级别日志。
+// 高频路径（如 trace 事件汇总）可先判断一次，避免白拼装一大堆字段。
+func DebugEnabled() bool {
+	if log == nil {
+		return false
+	}
+	return log.Core().Enabled(zapcore.DebugLevel)
+}
+
 // Fatal 记录 Fatal 级别日志，随后程序退出。
 func Fatal(msg string, fields ...zap.Field) {
 	if log == nil {

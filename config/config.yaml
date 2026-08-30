@@ -17,5 +17,7 @@ log:
 
 collector:
   url: http://localhost:8086/api/traces/report
-  batch_size: 1000
+  # 缓冲达到该数量即触发一次批量上报。调小可让事件更快送达、缓冲占用更低，
+  # 代价是请求次数变多；采集端吞吐足够时建议保持在 100 这一档。
+  batch_size: 100
   flush_interval: 30s

@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/YellCatt/apilab/logger"
@@ -81,7 +82,9 @@ type Options struct {
 }
 
 // 全局状态。provider 供 Shutdown 使用，reporter 供 IsEnabled 判断。
+// Init/shutdown 写、IsEnabled 读，加锁是为了热加载或并发测试时不出现 data race。
 var (
+	stateMu  sync.RWMutex
 	provider *sdktrace.TracerProvider
 	reporter Reporter
 )
@@ -116,7 +119,7 @@ func Init(opts Options) (func(), error) {
 		return func() {}, err
 	}
 
-	provider = sdktrace.NewTracerProvider(
+	p := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
 		sdktrace.WithSpanProcessor(sdktrace.NewBatchSpanProcessor(
 			&eventExporter{reporter: opts.Reporter},
@@ -124,13 +127,17 @@ func Init(opts Options) (func(), error) {
 			sdktrace.WithMaxQueueSize(maxQueueSize),
 		)),
 	)
-	otel.SetTracerProvider(provider)
+	stateMu.Lock()
+	provider = p
+	reporter = opts.Reporter
+	stateMu.Unlock()
+
+	otel.SetTracerProvider(p)
 	// 启用标准传播：上游带 traceparent 时沿用其 trace_id，实现跨服务串联。
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
-	reporter = opts.Reporter
 
 	logger.Debug("链路追踪已启用",
 		zap.String("service_name", name),
@@ -142,21 +149,27 @@ func Init(opts Options) (func(), error) {
 
 // IsEnabled 判断链路追踪是否已启用。未启用时不应创建 span。
 func IsEnabled() bool {
+	stateMu.RLock()
+	defer stateMu.RUnlock()
 	return reporter != nil
 }
 
 // shutdown 关闭 TracerProvider，把队列里剩余的 span 导出。
 // 必须在上报器关闭之前调用，否则最后一批 span 会来不及转成事件。
 func shutdown() {
-	if provider == nil {
+	stateMu.Lock()
+	p := provider
+	provider = nil
+	reporter = nil
+	stateMu.Unlock()
+	if p == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := provider.Shutdown(ctx); err != nil {
+	if err := p.Shutdown(ctx); err != nil {
 		logger.Error("关闭 TracerProvider 失败", zap.Error(err))
 	}
-	provider = nil
 }
 
 // eventExporter 把 OTel span 转成 model.TraceEvent 交给 Reporter。

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/YellCatt/apilab/logger"
 	"github.com/YellCatt/apilab/middleware"
@@ -28,6 +29,7 @@ func NewUserController(service service.UserService) *UserController {
 
 // CreateUser 处理 POST /api/users 请求，创建新用户。
 func (c *UserController) CreateUser(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	ctx := r.Context()
 
 	fields := middleware.Fields(r)
@@ -56,11 +58,17 @@ func (c *UserController) CreateUser(w http.ResponseWriter, r *http.Request) {
 		logger.Error("序列化创建用户响应失败", append(fields, zap.Uint("id", user.ID), zap.Error(err))...)
 		return
 	}
-	logger.Debug("用户创建成功", append(fields, zap.Uint("id", user.ID), zap.String("name", user.Name))...)
+	logger.Debug("用户创建成功",
+		append(fields,
+			zap.Uint("id", user.ID),
+			zap.String("name", user.Name),
+			zap.Duration("handler_cost", time.Since(start)),
+		)...)
 }
 
 // GetUserByID 处理 GET /api/users/{id} 请求，根据 ID 查询用户。
 func (c *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	ctx := r.Context()
 
 	idStr := r.PathValue("id")
@@ -81,7 +89,8 @@ func (c *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user == nil {
-		logger.Debug("用户不存在", append(fields, zap.Uint64("id", id))...)
+		logger.Debug("用户不存在",
+			append(fields, zap.Uint64("id", id), zap.Duration("handler_cost", time.Since(start)))...)
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
@@ -92,11 +101,17 @@ func (c *UserController) GetUserByID(w http.ResponseWriter, r *http.Request) {
 		logger.Error("序列化用户响应失败", append(fields, zap.Uint("id", user.ID), zap.Error(err))...)
 		return
 	}
-	logger.Debug("用户查询成功", append(fields, zap.Uint("id", user.ID), zap.String("name", user.Name))...)
+	logger.Debug("用户查询成功",
+		append(fields,
+			zap.Uint("id", user.ID),
+			zap.String("name", user.Name),
+			zap.Duration("handler_cost", time.Since(start)),
+		)...)
 }
 
 // GetAllUsers 处理 GET /api/users 请求，查询所有用户。
 func (c *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	ctx := r.Context()
 
 	fields := middleware.Fields(r)
@@ -115,11 +130,16 @@ func (c *UserController) GetAllUsers(w http.ResponseWriter, r *http.Request) {
 		logger.Error("序列化用户列表响应失败", append(fields, zap.Int("count", len(users)), zap.Error(err))...)
 		return
 	}
-	logger.Debug("用户列表查询成功", append(fields, zap.Int("count", len(users)))...)
+	logger.Debug("用户列表查询成功",
+		append(fields,
+			zap.Int("count", len(users)),
+			zap.Duration("handler_cost", time.Since(start)),
+		)...)
 }
 
 // UpdateUser 处理 PUT /api/users/{id} 请求，更新指定用户。
 func (c *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	ctx := r.Context()
 
 	idStr := r.PathValue("id")
@@ -150,7 +170,8 @@ func (c *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user == nil {
-		logger.Debug("用户不存在，未执行更新", append(fields, zap.Uint64("id", id))...)
+		logger.Debug("用户不存在，未执行更新",
+			append(fields, zap.Uint64("id", id), zap.Duration("handler_cost", time.Since(start)))...)
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
@@ -161,11 +182,18 @@ func (c *UserController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		logger.Error("序列化更新用户响应失败", append(fields, zap.Uint("id", user.ID), zap.Error(err))...)
 		return
 	}
-	logger.Debug("用户更新成功", append(fields, zap.Uint("id", user.ID), zap.String("name", user.Name), zap.Int("age", user.Age))...)
+	logger.Debug("用户更新成功",
+		append(fields,
+			zap.Uint("id", user.ID),
+			zap.String("name", user.Name),
+			zap.Int("age", user.Age),
+			zap.Duration("handler_cost", time.Since(start)),
+		)...)
 }
 
 // DeleteUser 处理 DELETE /api/users/{id} 请求，删除指定用户。
 func (c *UserController) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	ctx := r.Context()
 
 	idStr := r.PathValue("id")
@@ -187,5 +215,9 @@ func (c *UserController) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-	logger.Debug("用户删除成功", append(fields, zap.Uint64("id", id))...)
+	logger.Debug("用户删除成功",
+		append(fields,
+			zap.Uint64("id", id),
+			zap.Duration("handler_cost", time.Since(start)),
+		)...)
 }

@@ -43,6 +43,7 @@ func (s *userService) CreateUser(ctx context.Context, req *model.CreateUserReque
 		Name: req.Name,
 		Age:  req.Age,
 	}
+	logger.Debug("服务层：准备写入数据库", zap.String("name", req.Name), zap.Int("age", req.Age))
 	err := s.repo.Create(ctx, user)
 	if err != nil {
 		logger.Error("服务层：创建用户失败", zap.String("name", req.Name), zap.Error(err))
@@ -61,6 +62,7 @@ func (s *userService) GetUserByID(ctx context.Context, id uint) (*model.User, er
 
 	logger.Debug("服务层：查询用户", zap.Uint("id", id))
 
+	logger.Debug("服务层：准备从数据库查询", zap.Uint("id", id))
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		logger.Error("服务层：查询用户失败", zap.Uint("id", id), zap.Error(err))
@@ -70,6 +72,7 @@ func (s *userService) GetUserByID(ctx context.Context, id uint) (*model.User, er
 		logger.Debug("服务层：用户不存在", zap.Uint("id", id))
 		return nil, nil
 	}
+	logger.Debug("服务层：用户查询命中", zap.Uint("id", id), zap.String("name", user.Name))
 	return user, nil
 }
 
@@ -82,6 +85,7 @@ func (s *userService) GetAllUsers(ctx context.Context) ([]model.User, error) {
 
 	logger.Debug("服务层：查询用户列表")
 
+	logger.Debug("服务层：准备从数据库查询全部用户")
 	users, err := s.repo.GetAll(ctx)
 	if err != nil {
 		logger.Error("服务层：查询用户列表失败", zap.Error(err))
@@ -101,6 +105,7 @@ func (s *userService) UpdateUser(ctx context.Context, id uint, req *model.Update
 	logger.Debug("服务层：更新用户",
 		zap.Uint("id", id), zap.String("name", req.Name), zap.Int("age", req.Age))
 
+	logger.Debug("服务层：准备加载用户用于更新", zap.Uint("id", id))
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		logger.Error("服务层：更新前加载用户失败", zap.Uint("id", id), zap.Error(err))
@@ -111,7 +116,7 @@ func (s *userService) UpdateUser(ctx context.Context, id uint, req *model.Update
 		return nil, nil
 	}
 
-	// 记录将要写入的字段与原值，便于回溯“传了但没生效”或“值被覆盖”的情况。
+	// 记录将要写入的字段与原值，便于回溯"传了但没生效"或"值被覆盖"的情况。
 	applied := make([]string, 0, 2)
 	oldName, oldAge := user.Name, user.Age
 	if req.Name != "" {
@@ -126,6 +131,7 @@ func (s *userService) UpdateUser(ctx context.Context, id uint, req *model.Update
 		zap.Uint("id", id), zap.Strings("fields", applied),
 		zap.String("old_name", oldName), zap.Int("old_age", oldAge))
 
+	logger.Debug("服务层：准备写入数据库更新", zap.Uint("id", id), zap.Strings("fields", applied))
 	err = s.repo.Update(ctx, user)
 	if err != nil {
 		logger.Error("服务层：更新用户失败", zap.Uint("id", id), zap.Error(err))
@@ -144,6 +150,7 @@ func (s *userService) DeleteUser(ctx context.Context, id uint) error {
 
 	logger.Debug("服务层：删除用户", zap.Uint("id", id))
 
+	logger.Debug("服务层：准备从数据库删除", zap.Uint("id", id))
 	err := s.repo.Delete(ctx, id)
 	if err != nil {
 		logger.Error("服务层：删除用户失败", zap.Uint("id", id), zap.Error(err))
